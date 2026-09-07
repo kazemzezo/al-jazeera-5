@@ -1,0 +1,13 @@
+{
+  "name": "الجزيره خمسه",
+  "short_name": "الجزيره خمسه",
+  "description": "سوق الخردة الإلكتروني - الرصيف البحري وساحة الجزيره",
+  "start_url": "/al-jazeera-5/",
+  "scope": "/al-jazeera-5/",
+  "display": "standalone",
+  "background_color": "#f3f1ea",
+  "theme_color": "#2f6844",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": []
+}

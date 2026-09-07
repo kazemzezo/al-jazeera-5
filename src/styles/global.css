@@ -1,0 +1,99 @@
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap");
+
+:root {
+  --ink: #16211c;
+  --steel: #3e4c59;
+  --steel-light: #7a8894;
+  --kabbash: #2f6844;
+  --kabbash-light: #e4efe7;
+  --crane: #c98a2b;
+  --crane-light: #f7ecd8;
+  --copper: #a15226;
+  --paper: #f3f1ea;
+  --paper-raised: #ffffff;
+  --line: #d9d5c9;
+  --danger: #a3342f;
+
+  --font: "Cairo", "Segoe UI", sans-serif;
+  --radius: 10px;
+}
+
+[data-mode="dark"] {
+  --ink: #eef0ee;
+  --steel: #b7c2cc;
+  --steel-light: #7a8894;
+  --paper: #10181a;
+  --paper-raised: #16211f;
+  --line: #26332f;
+  --kabbash-light: #16281f;
+  --crane-light: #2a2013;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.65;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+.page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  color: var(--steel);
+  font-size: 15px;
+}
+
+.btn {
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: var(--kabbash);
+  border-color: var(--kabbash);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #24512f;
+  border-color: #24512f;
+}
