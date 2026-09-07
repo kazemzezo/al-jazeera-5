@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isPrimaryAdmin() {
+      return isSignedIn() && request.auth.token.email == "popofloop@gmail.com";
+    }
+
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (myRole() == "admin" || isPrimaryAdmin());
+    }
+
+    // ملف كل مستخدم: يقرأه صاحبه أو الأدمن، ولا يعدل دوره إلا الأدمن
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isAdmin() ||
+        (request.auth.uid == uid &&
+         request.resource.data.role == resource.data.role);
+      allow delete: if false; // لا يُحذف أي حساب، فقط يُعلّق (suspended)
+    }
+
+    // طلبات التوثيق: أي مستخدم مسجل ينشئ طلبه، الأدمن فقط يقرأ ويعدّل الكل
+    match /verification_requests/{id} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow read, update: if isAdmin();
+    }
+  }
+}
