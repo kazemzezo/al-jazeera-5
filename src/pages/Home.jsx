@@ -1,17 +1,43 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { ROLES } from "../lib/roles";
+import { ROLES, canReserve as canReserveRole } from "../lib/roles";
+import { LOCATIONS } from "../lib/catalog";
 import { requestVerification } from "../lib/verification";
+import { subscribeListings, subscribeTonPrices, markListingReserved } from "../lib/listings";
+import PriceBar from "../components/PriceBar";
+import AnnouncementBanner from "../components/AnnouncementBanner";
+import ListingCard from "../components/ListingCard";
+import AddListingForm from "../components/AddListingForm";
 
 export default function Home() {
   const { user, profile, role } = useAuth();
   const [sent, setSent] = useState(false);
+  const [location, setLocation] = useState(LOCATIONS.DOCK);
+  const [listings, setListings] = useState([]);
+  const [tonPrices, setTonPrices] = useState({});
 
   const isUnverifiedTrader = role === ROLES.TRADER;
+  const canManage = role === ROLES.ADMIN || (role === ROLES.SUPERVISOR && location === LOCATIONS.DOCK);
+  // ساحة الجزيره: الأدمن فقط هو من يضيف (حسب الاتفاق)، الرصيف البحري: المشرف أو الأدمن
+
+  useEffect(() => {
+    const unsub = subscribeListings(location, setListings);
+    return () => unsub();
+  }, [location]);
+
+  useEffect(() => {
+    const unsub = subscribeTonPrices(setTonPrices);
+    return () => unsub();
+  }, []);
 
   async function handleRequest() {
     await requestVerification(user, profile);
     setSent(true);
+  }
+
+  async function handleReserve(listing) {
+    if (!canReserveRole(role)) return;
+    await markListingReserved(listing.id, user.uid);
   }
 
   return (
@@ -23,7 +49,7 @@ export default function Home() {
             border: "1px solid var(--crane)",
             borderRadius: "var(--radius)",
             padding: "14px 16px",
-            marginBottom: 24,
+            marginBottom: 20,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -41,13 +67,61 @@ export default function Home() {
         </div>
       )}
 
-      <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 16 }}>
-        الرصيف البحري وساحة الجزيره
-      </h1>
-      <p style={{ color: "var(--steel)", fontSize: 14 }}>
-        صفحة عرض الأصناف (الرصيف البحري / ساحة الجزيره) ستُبنى في المرحلة
-        القادمة. الهيكل الأساسي وتسجيل الدخول والصلاحيات جاهزون الآن.
-      </p>
+      <PriceBar />
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button
+          className="btn"
+          style={{
+            background: location === LOCATIONS.DOCK ? "var(--kabbash)" : "transparent",
+            color: location === LOCATIONS.DOCK ? "#fff" : "var(--ink)",
+            borderColor: location === LOCATIONS.DOCK ? "var(--kabbash)" : "var(--ink)",
+          }}
+          onClick={() => setLocation(LOCATIONS.DOCK)}
+        >
+          الرصيف البحري
+        </button>
+        <button
+          className="btn"
+          style={{
+            background: location === LOCATIONS.YARD ? "var(--kabbash)" : "transparent",
+            color: location === LOCATIONS.YARD ? "#fff" : "var(--ink)",
+            borderColor: location === LOCATIONS.YARD ? "var(--kabbash)" : "var(--ink)",
+          }}
+          onClick={() => setLocation(LOCATIONS.YARD)}
+        >
+          ساحة الجزيره
+        </button>
+      </div>
+
+      <AnnouncementBanner location={location} />
+
+      {canManage && <AddListingForm location={location} />}
+
+      {listings.length === 0 ? (
+        <p style={{ color: "var(--steel)", fontSize: 14 }}>
+          لا توجد أصناف مدرجة حاليًا في{" "}
+          {location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}.
+        </p>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 12,
+          }}
+        >
+          {listings.map((l) => (
+            <ListingCard
+              key={l.id}
+              listing={l}
+              tonPrice={tonPrices[l.category]?.pricePerTon}
+              canReserve={canReserveRole(role)}
+              onReserve={() => handleReserve(l)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
