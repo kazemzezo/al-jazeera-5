@@ -14,7 +14,6 @@ import {
 import { db } from "./firebase";
 import { TON_CATEGORIES } from "./catalog";
 
-// ---------- أسعار الأصناف اليومية (بالطن) - شريط الأسعار العلوي ----------
 export function subscribeTonPrices(callback) {
   const ref = collection(db, "prices");
   return onSnapshot(ref, (snap) => {
@@ -34,11 +33,9 @@ export async function setTonPrice(category, pricePerTon, uid) {
 }
 
 export function ensureTonCategoriesSeed() {
-  // يُستخدم مرة واحدة من لوحة الإدمن لاحقًا لإنشاء وثائق الأصناف الافتراضية
   return TON_CATEGORIES;
 }
 
-// ---------- الإعلانات (المشرف/الأدمن) ----------
 export function subscribeAnnouncements(location, callback) {
   const q = query(
     collection(db, "announcements"),
@@ -60,7 +57,6 @@ export async function postAnnouncement(location, text, user) {
   });
 }
 
-// ---------- الأصناف المُدرجة (الرصيف البحري / ساحة الجزيره) ----------
 export function subscribeListings(location, callback) {
   const q = query(
     collection(db, "listings"),
