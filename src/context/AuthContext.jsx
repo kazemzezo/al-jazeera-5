@@ -34,8 +34,6 @@ export function AuthProvider({ children }) {
       const snap = await getDoc(userRef);
 
       if (!snap.exists()) {
-        // أول تسجيل دخول لهذا المستخدم: ننشئ ملفه بدور افتراضي "تاجر"
-        // إلا إذا كان بريده هو بريد الأدمن الأساسي
         const isPrimaryAdmin = firebaseUser.email === PRIMARY_ADMIN_EMAIL;
         const newProfile = {
           uid: firebaseUser.uid,
