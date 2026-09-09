@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ROLES, isDriver } from "../lib/roles";
 
@@ -14,6 +14,7 @@ const linkStyle = ({ isActive }) => ({
 
 export default function AppLayout() {
   const { user, profile, role, logout, isPrimaryAdmin } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <div style={{ minHeight: "100vh" }}>
@@ -73,7 +74,7 @@ export default function AppLayout() {
         </nav>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {user && (
+          {user ? (
             <>
               <span style={{ fontSize: 13, color: "var(--steel)" }}>
                 {profile?.name || user.email}
@@ -82,6 +83,14 @@ export default function AppLayout() {
                 خروج
               </button>
             </>
+          ) : (
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate("/login")}
+              style={{ padding: "6px 14px", fontSize: 13 }}
+            >
+              تسجيل الدخول
+            </button>
           )}
         </div>
       </header>
