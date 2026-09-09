@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { subscribeTonPrices } from "../lib/listings";
 import { TON_CATEGORIES } from "../lib/catalog";
+import { DEMO_TON_PRICES } from "../lib/demoData";
 
 export default function PriceBar() {
   const [prices, setPrices] = useState({});
@@ -9,6 +10,9 @@ export default function PriceBar() {
     const unsub = subscribeTonPrices(setPrices);
     return () => unsub();
   }, []);
+
+  const displayPrices = Object.keys(prices).length > 0 ? prices : DEMO_TON_PRICES;
+  const isDemo = Object.keys(prices).length === 0;
 
   return (
     <div
@@ -21,10 +25,16 @@ export default function PriceBar() {
         borderRadius: "var(--radius)",
         padding: "10px 12px",
         marginBottom: 20,
+        alignItems: "center",
       }}
     >
+      {isDemo && (
+        <span style={{ fontSize: 11, color: "var(--steel-light)", whiteSpace: "nowrap" }}>
+          (تجريبي)
+        </span>
+      )}
       {TON_CATEGORIES.map((cat) => {
-        const p = prices[cat]?.pricePerTon;
+        const p = displayPrices[cat]?.pricePerTon;
         return (
           <div
             key={cat}
