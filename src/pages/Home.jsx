@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useGuestPrompt } from "../context/GuestPromptContext";
 import { ROLES, canReserve as canReserveRole } from "../lib/roles";
 import { LOCATIONS } from "../lib/catalog";
 import { requestVerification } from "../lib/verification";
 import { subscribeListings, subscribeTonPrices, markListingReserved } from "../lib/listings";
+import { DEMO_LISTINGS, DEMO_TON_PRICES } from "../lib/demoData";
 import PriceBar from "../components/PriceBar";
 import AnnouncementBanner from "../components/AnnouncementBanner";
 import ListingCard from "../components/ListingCard";
@@ -11,6 +13,7 @@ import AddListingForm from "../components/AddListingForm";
 
 export default function Home() {
   const { user, profile, role } = useAuth();
+  const { promptLogin } = useGuestPrompt();
   const [sent, setSent] = useState(false);
   const [location, setLocation] = useState(LOCATIONS.DOCK);
   const [listings, setListings] = useState([]);
@@ -18,7 +21,13 @@ export default function Home() {
 
   const isUnverifiedTrader = role === ROLES.TRADER;
   const canManage = role === ROLES.ADMIN || (role === ROLES.SUPERVISOR && location === LOCATIONS.DOCK);
-  // ساحة الجزيره: الأدمن فقط هو من يضيف (حسب الاتفاق)، الرصيف البحري: المشرف أو الأدمن
+
+  const realListingsForLocation = listings;
+  const showDemo = realListingsForLocation.length === 0;
+  const displayListings = showDemo
+    ? DEMO_LISTINGS.filter((l) => l.location === location)
+    : realListingsForLocation;
+  const displayTonPrices = Object.keys(tonPrices).length > 0 ? tonPrices : DEMO_TON_PRICES;
 
   useEffect(() => {
     const unsub = subscribeListings(location, setListings);
@@ -36,6 +45,10 @@ export default function Home() {
   }
 
   async function handleReserve(listing) {
+    if (!user) {
+      promptLogin("سجّل دخولك عشان تقدر تحجز هذا الصنف");
+      return;
+    }
     if (!canReserveRole(role)) return;
     await markListingReserved(listing.id, user.uid);
   }
@@ -98,7 +111,13 @@ export default function Home() {
 
       {canManage && <AddListingForm location={location} />}
 
-      {listings.length === 0 ? (
+      {showDemo && (
+        <p style={{ fontSize: 12, color: "var(--steel-light)", marginBottom: 10 }}>
+          الأصناف دي بيانات تجريبية للعرض فقط، هتختفي أول ما تُضاف أصناف حقيقية.
+        </p>
+      )}
+
+      {displayListings.length === 0 ? (
         <p style={{ color: "var(--steel)", fontSize: 14 }}>
           لا توجد أصناف مدرجة حاليًا في{" "}
           {location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}.
@@ -111,12 +130,12 @@ export default function Home() {
             gap: 12,
           }}
         >
-          {listings.map((l) => (
+          {displayListings.map((l) => (
             <ListingCard
               key={l.id}
               listing={l}
-              tonPrice={tonPrices[l.category]?.pricePerTon}
-              canReserve={canReserveRole(role)}
+              tonPrice={displayTonPrices[l.category]?.pricePerTon}
+              canReserve={!l.demo && (!user || canReserveRole(role))}
               onReserve={() => handleReserve(l)}
             />
           ))}
