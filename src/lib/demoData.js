@@ -13,13 +13,13 @@ export const DEMO_TON_PRICES = {
 };
 
 export const DEMO_LISTINGS = [
-  { id: "demo-1", location: LOCATIONS.DOCK, saleType: SALE_TYPES.TON, category: "حديد", quantity: 8, demo: true },
-  { id: "demo-2", location: LOCATIONS.DOCK, saleType: SALE_TYPES.TON, category: "نحاس", quantity: 5, demo: true },
-  { id: "demo-3", location: LOCATIONS.DOCK, saleType: SALE_TYPES.LOT, category: "كابلات مختلفه", lotPrice: 45000, demo: true },
-  { id: "demo-4", location: LOCATIONS.DOCK, saleType: SALE_TYPES.PIECE, category: "براميل سعة 200 لتر", quantity: 40, piecePrice: 150, demo: true },
-  { id: "demo-5", location: LOCATIONS.YARD, saleType: SALE_TYPES.TON, category: "حديد", quantity: 400, demo: true },
-  { id: "demo-6", location: LOCATIONS.YARD, saleType: SALE_TYPES.LOT, category: "سيارات", lotPrice: 1200000, demo: true },
-  { id: "demo-7", location: LOCATIONS.YARD, saleType: SALE_TYPES.TON, category: "نحاس", quantity: 120, demo: true },
+  { id: "demo-1", location: LOCATIONS.DOCK, saleType: SALE_TYPES.TON, category: "حديد", quantity: 8, reservedQty: 0, demo: true },
+  { id: "demo-2", location: LOCATIONS.DOCK, saleType: SALE_TYPES.TON, category: "نحاس", quantity: 5, reservedQty: 0, demo: true },
+  { id: "demo-3", location: LOCATIONS.DOCK, saleType: SALE_TYPES.LOT, category: "كابلات مختلفه", lotPrice: 45000, reservedQty: 0, demo: true },
+  { id: "demo-4", location: LOCATIONS.DOCK, saleType: SALE_TYPES.PIECE, category: "براميل سعة 200 لتر", quantity: 40, piecePrice: 150, reservedQty: 0, demo: true },
+  { id: "demo-5", location: LOCATIONS.YARD, saleType: SALE_TYPES.TON, category: "حديد", quantity: 400, reservedQty: 0, demo: true },
+  { id: "demo-6", location: LOCATIONS.YARD, saleType: SALE_TYPES.LOT, category: "سيارات", lotPrice: 1200000, reservedQty: 0, demo: true },
+  { id: "demo-7", location: LOCATIONS.YARD, saleType: SALE_TYPES.TON, category: "نحاس", quantity: 120, reservedQty: 0, demo: true },
 ];
 
 export const DEMO_ANNOUNCEMENTS = {
