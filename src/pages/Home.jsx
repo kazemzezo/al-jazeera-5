@@ -13,7 +13,7 @@ import AddListingForm from "../components/AddListingForm";
 
 export default function Home() {
   const { user, profile, role } = useAuth();
-  const { promptLogin } = useGuestPrompt();
+  const { promptLogin, promptVerification } = useGuestPrompt();
   const [sent, setSent] = useState(false);
   const [location, setLocation] = useState(LOCATIONS.DOCK);
   const [listings, setListings] = useState([]);
@@ -46,10 +46,13 @@ export default function Home() {
 
   async function handleReserve(listing) {
     if (!user) {
-      promptLogin("سجّل دخولك عشان تقدر تحجز هذا الصنف");
+      promptLogin("لازم تسجل دخولك الأول عشان تقدر تحجز");
       return;
     }
-    if (!canReserveRole(role)) return;
+    if (!canReserveRole(role)) {
+      promptVerification("لا يمكنك الحجز بدون توثيق حسابك كتاجر أولاً. تواصل مع إدارة الموقع للتوثيق.");
+      return;
+    }
     await markListingReserved(listing.id, user.uid);
   }
 
@@ -135,7 +138,7 @@ export default function Home() {
               key={l.id}
               listing={l}
               tonPrice={displayTonPrices[l.category]?.pricePerTon}
-              canReserve={!l.demo && (!user || canReserveRole(role))}
+              canReserve={!l.demo}
               onReserve={() => handleReserve(l)}
             />
           ))}
