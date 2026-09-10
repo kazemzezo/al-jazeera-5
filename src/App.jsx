@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { GuestPromptProvider } from "./context/GuestPromptContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import Login from "./pages/Login";
@@ -14,45 +15,41 @@ export default function App() {
   return (
     <BrowserRouter basename="/al-jazeera-5">
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
+        <GuestPromptProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
 
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/" element={<Home />} />
-            <Route path="/calculator" element={<Calculator />} />
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<Home />} />
+              <Route path="/calculator" element={<Calculator />} />
 
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-                  <AdminPanel />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/supervisor"
-              element={
-                <ProtectedRoute allowedRoles={[ROLES.SUPERVISOR]}>
-                  <SupervisorPanel />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/driver"
-              element={
-                <ProtectedRoute allowedRoles={DRIVER_ROLES}>
-                  <DriverPanel />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
-        </Routes>
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                    <AdminPanel />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/supervisor"
+                element={
+                  <ProtectedRoute allowedRoles={[ROLES.SUPERVISOR]}>
+                    <SupervisorPanel />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/driver"
+                element={
+                  <ProtectedRoute allowedRoles={DRIVER_ROLES}>
+                    <DriverPanel />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
+          </Routes>
+        </GuestPromptProvider>
       </AuthProvider>
     </BrowserRouter>
   );
