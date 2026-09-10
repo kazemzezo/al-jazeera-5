@@ -11,6 +11,7 @@ export function GuestPromptProvider({ children }) {
   const { user } = useAuth();
   const [visible, setVisible] = useState(false);
   const [reason, setReason] = useState("");
+  const [mode, setMode] = useState("login");
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -19,6 +20,7 @@ export function GuestPromptProvider({ children }) {
 
     timerRef.current = setTimeout(() => {
       setReason("");
+      setMode("login");
       setVisible(true);
     }, AUTO_SHOW_DELAY_MS);
 
@@ -26,8 +28,14 @@ export function GuestPromptProvider({ children }) {
   }, [user]);
 
   function promptLogin(customReason) {
-    if (user) return;
     setReason(customReason || "");
+    setMode("login");
+    setVisible(true);
+  }
+
+  function promptVerification(customReason) {
+    setReason(customReason || "");
+    setMode("verify");
     setVisible(true);
   }
 
@@ -37,17 +45,25 @@ export function GuestPromptProvider({ children }) {
   }
 
   return (
-    <GuestPromptContext.Provider value={{ promptLogin }}>
+    <GuestPromptContext.Provider value={{ promptLogin, promptVerification }}>
       {children}
-      {visible && !user && (
-        <GuestPromptBanner reason={reason} onClose={() => dismiss(true)} />
+      {visible && (
+        <GuestPromptBanner reason={reason} mode={mode} onClose={() => dismiss(true)} />
       )}
     </GuestPromptContext.Provider>
   );
 }
 
-function GuestPromptBanner({ reason, onClose }) {
+function GuestPromptBanner({ reason, mode, onClose }) {
   const navigate = useNavigate();
+
+  const defaultReason =
+    mode === "verify"
+      ? "لا يمكنك الحجز بدون توثيق حسابك كتاجر"
+      : "سجّل دخولك للاستفادة من كل مزايا الموقع";
+
+  const actionLabel = mode === "verify" ? "طلب التوثيق" : "تسجيل الدخول";
+  const actionTo = mode === "verify" ? "/" : "/login";
 
   return (
     <div
@@ -69,19 +85,17 @@ function GuestPromptBanner({ reason, onClose }) {
         zIndex: 50,
       }}
     >
-      <span style={{ fontSize: 13, lineHeight: 1.5 }}>
-        {reason || "سجّل دخولك للاستفادة من كل مزايا الموقع"}
-      </span>
+      <span style={{ fontSize: 13, lineHeight: 1.5 }}>{reason || defaultReason}</span>
       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
         <button
           className="btn"
           style={{ fontSize: 12, padding: "6px 12px", background: "var(--kabbash)", borderColor: "var(--kabbash)", color: "#fff" }}
           onClick={() => {
             onClose();
-            navigate("/login");
+            navigate(actionTo);
           }}
         >
-          تسجيل الدخول
+          {actionLabel}
         </button>
         <button
           className="btn"
