@@ -1,29 +1,45 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useGuestPrompt } from "../context/GuestPromptContext";
 import { canReserve as canReserveRole } from "../lib/roles";
 import { TON_CATEGORIES, LOCATIONS, SITE_MAINTENANCE_FEE } from "../lib/catalog";
 import { EQUIPMENT, WORKER_PRICE_PER_CAR, TOTAL_WORKERS } from "../lib/equipment";
 import { DEMO_TON_PRICES } from "../lib/demoData";
+import { subscribeTonPrices, subscribeEquipmentPrices } from "../lib/listings";
 
 function fmt(n) {
   return Number(n || 0).toLocaleString("ar-EG") + "ج";
 }
 
 export default function Calculator() {
-  const { user, role } = useAuth();
-  const { promptLogin } = useGuestPrompt();
+  const { user, profile, role } = useAuth();
+  const { promptLogin, promptVerification } = useGuestPrompt();
 
   const [location, setLocation] = useState(LOCATIONS.DOCK);
-
   const [rows, setRows] = useState([{ category: TON_CATEGORIES[0], tons: 1 }]);
-
   const [equipmentHours, setEquipmentHours] = useState({});
   const [workerCount, setWorkerCount] = useState(0);
   const [workerHours, setWorkerHours] = useState(1);
   const [carCount, setCarCount] = useState(1);
+  const [confirmedInvoice, setConfirmedInvoice] = useState(null);
 
-  const tonPrices = DEMO_TON_PRICES;
+  const [liveTonPrices, setLiveTonPrices] = useState({});
+  const [liveEquipmentPrices, setLiveEquipmentPrices] = useState({});
+
+  useEffect(() => {
+    const unsub = subscribeTonPrices(setLiveTonPrices);
+    return () => unsub();
+  }, []);
+  useEffect(() => {
+    const unsub = subscribeEquipmentPrices(setLiveEquipmentPrices);
+    return () => unsub();
+  }, []);
+
+  const tonPrices = Object.keys(liveTonPrices).length > 0 ? liveTonPrices : DEMO_TON_PRICES;
+  const equipmentList = EQUIPMENT.map((eq) => ({
+    ...eq,
+    pricePerHour: liveEquipmentPrices[eq.id]?.pricePerHour ?? eq.pricePerHour,
+  }));
 
   function addRow() {
     setRows([...rows, { category: TON_CATEGORIES[0], tons: 1 }]);
@@ -35,50 +51,75 @@ export default function Calculator() {
     setRows(rows.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
   }
 
-  const scrapTotal = useMemo(() => {
-    return rows.reduce((sum, r) => {
-      const price = tonPrices[r.category]?.pricePerTon || 0;
-      return sum + price * Number(r.tons || 0);
-    }, 0);
-  }, [rows]);
+  const scrapRows = useMemo(
+    () =>
+      rows.map((r) => ({
+        ...r,
+        price: tonPrices[r.category]?.pricePerTon || 0,
+        total: (tonPrices[r.category]?.pricePerTon || 0) * Number(r.tons || 0),
+      })),
+    [rows, tonPrices]
+  );
+  const scrapTotal = scrapRows.reduce((s, r) => s + r.total, 0);
 
-  const equipmentTotal = useMemo(() => {
-    return EQUIPMENT.reduce((sum, eq) => {
-      const hours = Number(equipmentHours[eq.id] || 0);
-      return sum + hours * eq.pricePerHour;
-    }, 0);
-  }, [equipmentHours]);
+  const equipmentRows = useMemo(
+    () =>
+      equipmentList
+        .map((eq) => ({
+          ...eq,
+          hours: Number(equipmentHours[eq.id] || 0),
+          total: Number(equipmentHours[eq.id] || 0) * eq.pricePerHour,
+        }))
+        .filter((eq) => eq.hours > 0),
+    [equipmentHours, liveEquipmentPrices]
+  );
+  const equipmentTotal = equipmentRows.reduce((s, r) => s + r.total, 0);
 
-  const workersTotal = useMemo(() => {
-    return Number(workerCount || 0) * Number(workerHours || 0) * WORKER_PRICE_PER_CAR;
-  }, [workerCount, workerHours]);
+  const workersTotal = Number(workerCount || 0) * Number(workerHours || 0) * WORKER_PRICE_PER_CAR;
 
   const maintenanceFee = SITE_MAINTENANCE_FEE[location];
   const maintenanceTotal = Number(carCount || 0) * maintenanceFee;
 
   const grandTotal = scrapTotal + equipmentTotal + workersTotal + maintenanceTotal;
-
   const canConfirm = canReserveRole(role);
 
   function handleConfirm() {
     if (!user) {
-      promptLogin("سجّل دخولك عشان تقدر تأكد الحجز");
+      promptLogin("لازم تسجل دخولك الأول عشان تقدر تأكد الحجز");
       return;
     }
     if (!canConfirm) {
+      promptVerification("لا يمكنك الحجز بدون توثيق حسابك كتاجر أولاً. تواصل مع إدارة الموقع للتوثيق.");
       return;
     }
-    window.print();
+    setConfirmedInvoice({
+      invoiceId: "AJ5-" + Date.now().toString().slice(-8),
+      date: new Date().toLocaleDateString("ar-EG"),
+      traderName: profile?.name || user.email,
+      location,
+      scrapRows: scrapRows.filter((r) => r.tons > 0),
+      equipmentRows,
+      workerCount,
+      workerHours,
+      workersTotal,
+      carCount,
+      maintenanceFee,
+      maintenanceTotal,
+      scrapTotal,
+      equipmentTotal,
+      grandTotal,
+    });
+  }
+
+  if (confirmedInvoice) {
+    return <InvoiceView invoice={confirmedInvoice} onBack={() => setConfirmedInvoice(null)} />;
   }
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>
-        أداة الحساب
-      </h1>
+      <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>أداة الحساب</h1>
       <p style={{ fontSize: 13, color: "var(--steel)", marginBottom: 20 }}>
-        الأسعار المعروضة تجريبية حاليًا، هتتحدث تلقائيًا من لوحة الإدمن في
-        المرحلة القادمة.
+        الأسعار تُحدّث تلقائيًا حسب ما يضعه الأدمن.
       </p>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
@@ -108,39 +149,27 @@ export default function Calculator() {
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <input
-                type="number"
-                min="0"
-                value={r.tons}
-                onChange={(e) => updateRow(idx, "tons", e.target.value)}
-                style={{ width: 70 }}
-              />
+              <input type="number" min="0" value={r.tons} onChange={(e) => updateRow(idx, "tons", e.target.value)} style={{ width: 70 }} />
               <span className="unit">طن</span>
               <span className="rp">{fmt(price * Number(r.tons || 0))}</span>
               {rows.length > 1 && (
-                <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => removeRow(idx)}>
-                  حذف
-                </button>
+                <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => removeRow(idx)}>حذف</button>
               )}
             </div>
           );
         })}
-        <button className="btn" style={{ marginTop: 10, fontSize: 13 }} onClick={addRow}>
-          + إضافة صنف
-        </button>
+        <button className="btn" style={{ marginTop: 10, fontSize: 13 }} onClick={addRow}>+ إضافة صنف</button>
       </Section>
 
       <Section title="المعدات والعمال">
-        {EQUIPMENT.map((eq) => (
+        {equipmentList.map((eq) => (
           <div key={eq.id} className="calc-row">
             <span style={{ flex: 1 }}>{eq.name}</span>
             <input
               type="number"
               min="0"
               value={equipmentHours[eq.id] || ""}
-              onChange={(e) =>
-                setEquipmentHours({ ...equipmentHours, [eq.id]: e.target.value })
-              }
+              onChange={(e) => setEquipmentHours({ ...equipmentHours, [eq.id]: e.target.value })}
               placeholder="0"
               style={{ width: 70 }}
             />
@@ -151,39 +180,19 @@ export default function Calculator() {
 
         <div className="calc-row">
           <span style={{ flex: 1 }}>عمال (من أصل {TOTAL_WORKERS})</span>
-          <input
-            type="number"
-            min="0"
-            max={TOTAL_WORKERS}
-            value={workerCount || ""}
-            onChange={(e) => setWorkerCount(e.target.value)}
-            placeholder="0"
-            style={{ width: 70 }}
-          />
+          <input type="number" min="0" max={TOTAL_WORKERS} value={workerCount || ""} onChange={(e) => setWorkerCount(e.target.value)} placeholder="0" style={{ width: 70 }} />
           <span className="unit">عامل</span>
         </div>
         <div className="calc-row">
           <span style={{ flex: 1 }}>عدد ساعات العمال</span>
-          <input
-            type="number"
-            min="0"
-            value={workerHours}
-            onChange={(e) => setWorkerHours(e.target.value)}
-            style={{ width: 70 }}
-          />
+          <input type="number" min="0" value={workerHours} onChange={(e) => setWorkerHours(e.target.value)} style={{ width: 70 }} />
           <span className="unit">ساعة</span>
           <span className="rp">{fmt(workersTotal)}</span>
         </div>
 
         <div className="calc-row" style={{ marginTop: 8 }}>
           <span style={{ flex: 1 }}>عدد السيارات (صيانة الرصيف)</span>
-          <input
-            type="number"
-            min="0"
-            value={carCount}
-            onChange={(e) => setCarCount(e.target.value)}
-            style={{ width: 70 }}
-          />
+          <input type="number" min="0" value={carCount} onChange={(e) => setCarCount(e.target.value)} style={{ width: 70 }} />
           <span className="unit">سيارة × {fmt(maintenanceFee)}</span>
           <span className="rp">{fmt(maintenanceTotal)}</span>
         </div>
@@ -201,26 +210,17 @@ export default function Calculator() {
 
         {user && !canConfirm && (
           <p style={{ fontSize: 12, color: "var(--danger)", marginTop: 10 }}>
-            حسابك غير موثق، لا يمكنك تأكيد الحجز حاليًا. تواصل مع إدارة الموقع
-            للتوثيق من الصفحة الرئيسية.
+            حسابك غير موثق، لا يمكنك تأكيد الحجز حاليًا.
           </p>
         )}
 
         <button className="btn btn-primary" style={{ width: "100%", marginTop: 14 }} onClick={handleConfirm}>
-          {user ? "تأكيد الحجز وطباعة الفاتورة" : "سجّل دخولك لتأكيد الحجز"}
+          {user ? "تأكيد الحجز وعرض الفاتورة" : "سجّل دخولك لتأكيد الحجز"}
         </button>
       </Section>
 
       <style>{`
-        .calc-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 0;
-          border-bottom: 1px solid var(--line);
-          font-size: 13px;
-          flex-wrap: wrap;
-        }
+        .calc-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
         .calc-row .unit { color: var(--steel-light); font-size: 12px; white-space: nowrap; }
         .calc-row .rp { min-width: 90px; text-align: left; font-weight: 700; margin-inline-start: auto; }
       `}</style>
@@ -228,20 +228,91 @@ export default function Calculator() {
   );
 }
 
-function Section({ title, children }) {
+function InvoiceView({ invoice, onBack }) {
   return (
-    <div
-      style={{
-        background: "var(--paper-raised)",
-        border: "1px solid var(--line)",
-        borderRadius: "var(--radius)",
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
-      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--steel)", margin: "0 0 10px" }}>
+    <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+        <button className="btn" onClick={onBack}>عودة للأداة</button>
+        <button className="btn btn-primary" onClick={() => window.print()}>طباعة / حفظ PDF</button>
+      </div>
+
+      <div id="invoice-print" style={{ background: "var(--paper-raised)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 24 }}>
+        <div style={{ textAlign: "center", marginBottom: 20, borderBottom: "2px solid var(--ink)", paddingBottom: 16 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 900, margin: "0 0 4px" }}>فاتورة الجزيره خمسه</h1>
+          <p style={{ fontSize: 12, color: "var(--steel)", margin: 0 }}>
+            رقم الفاتورة: {invoice.invoiceId} · التاريخ: {invoice.date}
+          </p>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, fontSize: 13 }}>
+          <span><b>اسم التاجر:</b> {invoice.traderName}</span>
+          <span><b>الموقع:</b> {invoice.location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}</span>
+        </div>
+
+        {invoice.scrapRows.length > 0 && (
+          <InvoiceGroup title="أسعار الأصناف">
+            {invoice.scrapRows.map((r, i) => (
+              <InvoiceLine key={i} label={`${r.category} - ${r.tons} طن`} value={r.total} />
+            ))}
+          </InvoiceGroup>
+        )}
+
+        {(invoice.equipmentRows.length > 0 || invoice.workerCount > 0) && (
+          <InvoiceGroup title="الرسوم الإيجارية للمعدات والعمالة">
+            {invoice.equipmentRows.map((r, i) => (
+              <InvoiceLine key={i} label={`${r.name} - ${r.hours} ساعة`} value={r.total} />
+            ))}
+            {invoice.workerCount > 0 && (
+              <InvoiceLine label={`عمال (${invoice.workerCount}) - ${invoice.workerHours} ساعة`} value={invoice.workersTotal} />
+            )}
+          </InvoiceGroup>
+        )}
+
+        <InvoiceGroup title="رسوم الرصيف">
+          <InvoiceLine label={`صيانة الرصيف (${invoice.carCount} سيارة × ${fmt(invoice.maintenanceFee)})`} value={invoice.maintenanceTotal} />
+        </InvoiceGroup>
+
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, paddingTop: 16, borderTop: "2px solid var(--ink)" }}>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>الإجمالي الكلي</span>
+          <span style={{ fontSize: 24, fontWeight: 900 }}>{fmt(invoice.grandTotal)}</span>
+        </div>
+      </div>
+
+      <style>{`
+        @media print {
+          .no-print, header, nav { display: none !important; }
+          main { padding: 0 !important; max-width: 100% !important; }
+          #invoice-print { border: none !important; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function InvoiceGroup({ title, children }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--steel)", borderBottom: "1px solid var(--line)", paddingBottom: 6, marginBottom: 8 }}>
         {title}
       </p>
+      {children}
+    </div>
+  );
+}
+
+function InvoiceLine({ label, value }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}>
+      <span>{label}</span>
+      <span style={{ fontWeight: 700 }}>{fmt(value)}</span>
+    </div>
+  );
+}
+
+function Section({ title, children }) {
+  return (
+    <div style={{ background: "var(--paper-raised)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 16, marginBottom: 16 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--steel)", margin: "0 0 10px" }}>{title}</p>
       {children}
     </div>
   );
