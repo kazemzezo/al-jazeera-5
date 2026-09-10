@@ -30,24 +30,29 @@ export function AuthProvider({ children }) {
       }
       setUser(firebaseUser);
 
-      const userRef = doc(db, "users", firebaseUser.uid);
-      const snap = await getDoc(userRef);
+      try {
+        const userRef = doc(db, "users", firebaseUser.uid);
+        const snap = await getDoc(userRef);
 
-      if (!snap.exists()) {
-        const isPrimaryAdmin = firebaseUser.email === PRIMARY_ADMIN_EMAIL;
-        const newProfile = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          name: firebaseUser.displayName || "",
-          photoURL: firebaseUser.photoURL || "",
-          role: isPrimaryAdmin ? ROLES.ADMIN : ROLES.TRADER,
-          suspended: false,
-          createdAt: serverTimestamp(),
-        };
-        await setDoc(userRef, newProfile);
-        setProfile(newProfile);
-      } else {
-        setProfile(snap.data());
+        if (!snap.exists()) {
+          const isPrimaryAdmin = firebaseUser.email === PRIMARY_ADMIN_EMAIL;
+          const newProfile = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || "",
+            photoURL: firebaseUser.photoURL || "",
+            role: isPrimaryAdmin ? ROLES.ADMIN : ROLES.TRADER,
+            suspended: false,
+            createdAt: serverTimestamp(),
+          };
+          await setDoc(userRef, newProfile);
+          setProfile(newProfile);
+        } else {
+          setProfile(snap.data());
+        }
+      } catch (err) {
+        console.error("تعذر تحميل ملف المستخدم:", err);
+        setProfile(null);
       }
       setLoading(false);
     });
