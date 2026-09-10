@@ -2,9 +2,14 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useGuestPrompt } from "../context/GuestPromptContext";
 import { ROLES, canReserve as canReserveRole } from "../lib/roles";
-import { LOCATIONS } from "../lib/catalog";
+import { LOCATIONS, SALE_TYPES } from "../lib/catalog";
 import { requestVerification } from "../lib/verification";
-import { subscribeListings, subscribeTonPrices, markListingReserved } from "../lib/listings";
+import {
+  subscribeListings,
+  subscribeTonPrices,
+  reserveListingQuantity,
+  reserveLot,
+} from "../lib/listings";
 import { DEMO_LISTINGS, DEMO_TON_PRICES } from "../lib/demoData";
 import PriceBar from "../components/PriceBar";
 import AnnouncementBanner from "../components/AnnouncementBanner";
@@ -18,15 +23,13 @@ export default function Home() {
   const [location, setLocation] = useState(LOCATIONS.DOCK);
   const [listings, setListings] = useState([]);
   const [tonPrices, setTonPrices] = useState({});
+  const [notice, setNotice] = useState("");
 
   const isUnverifiedTrader = role === ROLES.TRADER;
   const canManage = role === ROLES.ADMIN || (role === ROLES.SUPERVISOR && location === LOCATIONS.DOCK);
 
-  const realListingsForLocation = listings;
-  const showDemo = realListingsForLocation.length === 0;
-  const displayListings = showDemo
-    ? DEMO_LISTINGS.filter((l) => l.location === location)
-    : realListingsForLocation;
+  const showDemo = listings.length === 0;
+  const displayListings = showDemo ? DEMO_LISTINGS.filter((l) => l.location === location) : listings;
   const displayTonPrices = Object.keys(tonPrices).length > 0 ? tonPrices : DEMO_TON_PRICES;
 
   useEffect(() => {
@@ -39,12 +42,18 @@ export default function Home() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(""), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   async function handleRequest() {
     await requestVerification(user, profile);
     setSent(true);
   }
 
-  async function handleReserve(listing) {
+  async function handleReserve(listing, qty) {
     if (!user) {
       promptLogin("لازم تسجل دخولك الأول عشان تقدر تحجز");
       return;
@@ -53,26 +62,32 @@ export default function Home() {
       promptVerification("لا يمكنك الحجز بدون توثيق حسابك كتاجر أولاً. تواصل مع إدارة الموقع للتوثيق.");
       return;
     }
-    await markListingReserved(listing.id, user.uid);
+
+    if (listing.saleType === SALE_TYPES.LOT) {
+      const res = await reserveLot(listing.id, user);
+      if (!res.ok) setNotice("تم حجز هذا اللوط بالفعل من تاجر آخر.");
+      else setNotice("تم تأكيد الحجز بنجاح.");
+      return;
+    }
+
+    const res = await reserveListingQuantity(listing.id, Number(qty || 1), user);
+    if (!res.ok) {
+      setNotice(`الكمية المطلوبة أكبر من المتاح. المتاح حاليًا: ${res.available}.`);
+    } else {
+      setNotice("تم تأكيد الحجز بنجاح.");
+    }
   }
 
   return (
     <div>
+      {notice && (
+        <div style={{ background: "var(--kabbash-light)", border: "1px solid var(--kabbash)", borderRadius: "var(--radius)", padding: "10px 14px", marginBottom: 14, fontSize: 13 }}>
+          {notice}
+        </div>
+      )}
+
       {isUnverifiedTrader && (
-        <div
-          style={{
-            background: "var(--crane-light)",
-            border: "1px solid var(--crane)",
-            borderRadius: "var(--radius)",
-            padding: "14px 16px",
-            marginBottom: 20,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
+        <div style={{ background: "var(--crane-light)", border: "1px solid var(--crane)", borderRadius: "var(--radius)", padding: "14px 16px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14 }}>
             حسابك غير موثق حاليًا، يمكنك استخدام أدوات الحساب للاطلاع فقط. للحجز
             والشراء، تواصل مع إدارة الموقع للتوثيق.
@@ -126,20 +141,14 @@ export default function Home() {
           {location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}.
         </p>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: 12,
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
           {displayListings.map((l) => (
             <ListingCard
               key={l.id}
               listing={l}
               tonPrice={displayTonPrices[l.category]?.pricePerTon}
               canReserve={!l.demo}
-              onReserve={() => handleReserve(l)}
+              onReserve={(qty) => handleReserve(l, qty)}
             />
           ))}
         </div>
