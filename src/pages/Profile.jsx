@@ -9,6 +9,7 @@ import { ROLES } from "../lib/roles";
 import { subscribeMyLatestVerification } from "../lib/verification";
 import { subscribeMyReservations } from "../lib/listings";
 import InvoiceView from "../components/InvoiceView";
+import CompleteProfileForm from "../components/CompleteProfileForm";
 
 const ROLE_LABELS = {
   [ROLES.ADMIN]: "أدمن",
@@ -23,6 +24,7 @@ const ROLE_LABELS = {
 const RES_STATUS_LABELS = {
   new: "🟡 جديد",
   contacted: "🔵 تم التواصل",
+  in_progress: "🟣 قيد التنفيذ",
   completed: "🟢 مكتمل",
   cancelled: "🔴 ملغي",
 };
@@ -37,10 +39,16 @@ function statusStyle(status) {
     fontSize: 12,
     fontWeight: 700,
   };
-  if (status === "new") return { ...base, background: "var(--crane-light)", color: "var(--crane)" };
-  if (status === "contacted") return { ...base, background: "var(--kabbash-light)", color: "var(--steel)" };
-  if (status === "completed") return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
-  if (status === "cancelled") return { ...base, background: "var(--danger-light)", color: "var(--danger)" };
+  if (status === "new")
+    return { ...base, background: "var(--crane-light)", color: "var(--crane)" };
+  if (status === "contacted")
+    return { ...base, background: "var(--kabbash-light)", color: "var(--steel)" };
+  if (status === "in_progress")
+    return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+  if (status === "completed")
+    return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+  if (status === "cancelled")
+    return { ...base, background: "var(--danger-light)", color: "var(--danger)" };
   return base;
 }
 
@@ -48,13 +56,14 @@ export default function Profile() {
   const { user, profile, role } = useAuth();
   const { promptVerification } = useGuestPrompt();
   const navigate = useNavigate();
-  const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
   const [verification, setVerification] = useState(null);
   const [loadingVerif, setLoadingVerif] = useState(true);
   const [myReservations, setMyReservations] = useState([]);
   const [viewing, setViewing] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -80,7 +89,9 @@ export default function Profile() {
       navigate("/");
     } catch (err) {
       if (err.code === "auth/requires-recent-login") {
-        setError("لأسباب أمنية، لازم تسجل خروج وتدخل تاني قبل ما تقدر تحذف الحساب.");
+        setError(
+          "لأسباب أمنية، لازم تسجل خروج وتدخل تاني قبل ما تقدر تحذف الحساب."
+        );
       } else {
         setError("حصل خطأ أثناء حذف الحساب، حاول مرة أخرى.");
       }
@@ -98,6 +109,7 @@ export default function Profile() {
     <div style={{ maxWidth: 620 }}>
       <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 16 }}>حسابي</h1>
 
+      {/* بياناتي */}
       <div
         style={{
           background: "var(--paper-raised)",
@@ -107,11 +119,36 @@ export default function Profile() {
           marginBottom: 16,
         }}
       >
-        <Row label="الاسم" value={profile?.name || "—"} />
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 12,
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <p style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>بياناتي</p>
+          <button
+            className="btn"
+            style={{ fontSize: 12.5, padding: "5px 12px" }}
+            onClick={() => setEditing(true)}
+          >
+            ✏️ تعديل البيانات
+          </button>
+        </div>
+
+        <Row label="الاسم الكامل" value={profile?.name || "—"} />
         <Row label="البريد الإلكتروني" value={user?.email} />
-        <Row label="نوع الحساب" value={ROLE_LABELS[role] || "—"} />
+        <Row label="رقم الهاتف" value={profile?.phone || "—"} />
+        <Row label="المحافظة" value={profile?.governorate || "—"} />
+        <Row label="اسم الشركة" value={profile?.company || "—"} />
+        <Row label="عنوان الشركة" value={profile?.address || "—"} />
+        <Row label="نوع الحساب" value={ROLE_LABELS[role] || "—"} last />
       </div>
 
+      {/* حالة التوثيق */}
       {!isVerified ? (
         <div
           style={{
@@ -134,12 +171,18 @@ export default function Profile() {
       ) : (
         <div
           className="badge"
-          style={{ display: "inline-flex", padding: "10px 16px", fontSize: 13, marginBottom: 16 }}
+          style={{
+            display: "inline-flex",
+            padding: "10px 16px",
+            fontSize: 13,
+            marginBottom: 16,
+          }}
         >
           ✅ حسابك موثق — يمكنك تأكيد الحجوزات
         </div>
       )}
 
+      {/* حجوزاتي */}
       <div
         style={{
           background: "var(--paper-raised)",
@@ -172,33 +215,85 @@ export default function Profile() {
                     padding: 12,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
                     <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                        }}
+                      >
                         <span style={statusStyle(r.status)}>
                           {RES_STATUS_LABELS[r.status] || r.status}
                         </span>
                         {r.invoiceId && (
-                          <span style={{ fontSize: 11, color: "var(--steel-light)" }}>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "var(--steel-light)",
+                            }}
+                          >
                             {r.invoiceId}
                           </span>
                         )}
                       </div>
-                      <p style={{ margin: "6px 0 2px", fontSize: 13.5, fontWeight: 600 }}>
+                      <p
+                        style={{
+                          margin: "6px 0 2px",
+                          fontSize: 13.5,
+                          fontWeight: 600,
+                        }}
+                      >
                         {r.type === "calculator"
-                          ? `فاتورة من الحاسبة · ${r.location === "dock" ? "الرصيف" : "الساحة"}`
-                          : `${r.category} · ${r.qty} ${r.saleType === "lot" ? "لوط" : r.saleType === "piece" ? "قطعة" : "طن"}`}
+                          ? `فاتورة من الحاسبة · ${
+                              r.location === "dock" ? "الرصيف" : "الساحة"
+                            }`
+                          : `${r.category} · ${r.qty} ${
+                              r.saleType === "lot"
+                                ? "لوط"
+                                : r.saleType === "piece"
+                                ? "قطعة"
+                                : "طن"
+                            }`}
                       </p>
-                      <p style={{ margin: 0, fontSize: 11.5, color: "var(--steel-light)" }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 11.5,
+                          color: "var(--steel-light)",
+                        }}
+                      >
                         {dateLabel}
                       </p>
                       {r.status === "cancelled" && r.cancelReason && (
-                        <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--danger)" }}>
+                        <p
+                          style={{
+                            margin: "6px 0 0",
+                            fontSize: 12,
+                            color: "var(--danger)",
+                          }}
+                        >
                           <b>سبب الإلغاء:</b> {r.cancelReason}
                         </p>
                       )}
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-end",
+                        gap: 6,
+                      }}
+                    >
                       <span style={{ fontSize: 16, fontWeight: 900 }}>
                         {Number(r.grandTotal || 0).toLocaleString("ar-EG")}ج
                       </span>
@@ -218,6 +313,7 @@ export default function Profile() {
         )}
       </div>
 
+      {/* حذف الحساب — زي ما كان */}
       <div
         style={{
           background: "var(--paper-raised)",
@@ -226,9 +322,12 @@ export default function Profile() {
           padding: 18,
         }}
       >
-        <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>حذف الحساب</p>
+        <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>
+          حذف الحساب
+        </p>
         <p style={{ fontSize: 12, color: "var(--steel)", marginBottom: 12 }}>
-          حذف حسابك نهائي وسيؤدي لمسح بياناتك بالكامل من الموقع، ولا يمكن التراجع عنه.
+          حذف حسابك نهائي وسيؤدي لمسح بياناتك بالكامل من الموقع، ولا يمكن التراجع
+          عنه.
         </p>
 
         {!confirming ? (
@@ -247,37 +346,73 @@ export default function Profile() {
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 className="btn"
-                style={{ background: "var(--danger)", borderColor: "var(--danger)", color: "#fff" }}
+                style={{
+                  background: "var(--danger)",
+                  borderColor: "var(--danger)",
+                  color: "#fff",
+                }}
                 onClick={handleDelete}
                 disabled={deleting}
               >
                 {deleting ? "جاري الحذف..." : "نعم، احذف حسابي"}
               </button>
-              <button className="btn" onClick={() => setConfirming(false)} disabled={deleting}>
+              <button
+                className="btn"
+                onClick={() => setConfirming(false)}
+                disabled={deleting}
+              >
                 تراجع
               </button>
             </div>
           </div>
         )}
 
-        {error && <p style={{ color: "var(--danger)", fontSize: 12, marginTop: 10 }}>{error}</p>}
+        {error && (
+          <p
+            style={{
+              color: "var(--danger)",
+              fontSize: 12,
+              marginTop: 10,
+            }}
+          >
+            {error}
+          </p>
+        )}
       </div>
+
+      {editing && (
+        <CompleteProfileForm forceMode onClose={() => setEditing(false)} />
+      )}
     </div>
   );
 }
 
 function VerificationStatus({ loading, verification, onRequest }) {
   if (loading) {
-    return <p style={{ fontSize: 13, color: "var(--steel)", margin: 0 }}>جاري التحميل...</p>;
+    return (
+      <p style={{ fontSize: 13, color: "var(--steel)", margin: 0 }}>
+        جاري التحميل...
+      </p>
+    );
   }
 
   if (!verification) {
     return (
       <div>
-        <p style={{ fontSize: 13, color: "var(--steel)", margin: "0 0 12px", lineHeight: 1.7 }}>
-          حسابك غير موثق حاليًا، وبالتالي لا يمكنك تأكيد أي حجز. أرسل طلب توثيق وهيتم مراجعته من الإدارة.
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--steel)",
+            margin: "0 0 12px",
+            lineHeight: 1.7,
+          }}
+        >
+          حسابك غير موثق حاليًا، وبالتالي لا يمكنك تأكيد أي حجز. أرسل طلب توثيق
+          وهيتم مراجعته من الإدارة.
         </p>
-        <button className="btn btn-primary" onClick={onRequest}>أرسل طلب توثيق</button>
+        <button className="btn btn-primary" onClick={onRequest}>
+          أرسل طلب توثيق
+        </button>
       </div>
     );
   }
@@ -285,11 +420,23 @@ function VerificationStatus({ loading, verification, onRequest }) {
   if (verification.status === "pending") {
     return (
       <div>
-        <div className="badge badge-warn" style={{ padding: "8px 14px", fontSize: 13 }}>
+        <div
+          className="badge badge-warn"
+          style={{ padding: "8px 14px", fontSize: 13 }}
+        >
           ⏳ طلبك تحت المراجعة
         </div>
-        <p style={{ fontSize: 12.5, color: "var(--steel)", margin: "10px 0 0" }}>
-          تم إرسال طلبك بتاريخ {verification.createdAt?.toDate?.().toLocaleDateString("ar-EG") || "—"} وسيتم إشعارك عند الرد.
+        <p
+          style={{
+            fontSize: 12.5,
+            color: "var(--steel)",
+            margin: "10px 0 0",
+          }}
+        >
+          تم إرسال طلبك بتاريخ{" "}
+          {verification.createdAt?.toDate?.().toLocaleDateString("ar-EG") ||
+            "—"}{" "}
+          وسيتم إشعارك عند الرد.
         </p>
       </div>
     );
@@ -298,15 +445,28 @@ function VerificationStatus({ loading, verification, onRequest }) {
   if (verification.status === "rejected") {
     return (
       <div>
-        <div className="badge badge-danger" style={{ padding: "8px 14px", fontSize: 13 }}>
+        <div
+          className="badge badge-danger"
+          style={{ padding: "8px 14px", fontSize: 13 }}
+        >
           ❌ تم رفض الطلب
         </div>
         {verification.rejectReason && (
-          <p style={{ fontSize: 13, color: "var(--ink)", margin: "10px 0 12px" }}>
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--ink)",
+              margin: "10px 0 12px",
+            }}
+          >
             <b>السبب:</b> {verification.rejectReason}
           </p>
         )}
-        <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={onRequest}>
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: 8 }}
+          onClick={onRequest}
+        >
           إعادة إرسال الطلب
         </button>
       </div>
@@ -315,7 +475,10 @@ function VerificationStatus({ loading, verification, onRequest }) {
 
   if (verification.status === "approved") {
     return (
-      <div className="badge" style={{ padding: "8px 14px", fontSize: 13 }}>
+      <div
+        className="badge"
+        style={{ padding: "8px 14px", fontSize: 13 }}
+      >
         ✅ حسابك موثق
       </div>
     );
@@ -324,7 +487,7 @@ function VerificationStatus({ loading, verification, onRequest }) {
   return null;
 }
 
-function Row({ label, value }) {
+function Row({ label, value, last }) {
   return (
     <div
       style={{
@@ -332,11 +495,12 @@ function Row({ label, value }) {
         justifyContent: "space-between",
         padding: "8px 0",
         fontSize: 13,
-        borderBottom: "1px solid var(--line)",
+        borderBottom: last ? "none" : "1px solid var(--line)",
+        gap: 10,
       }}
     >
-      <span style={{ color: "var(--steel)" }}>{label}</span>
-      <span style={{ fontWeight: 700 }}>{value}</span>
+      <span style={{ color: "var(--steel)", flexShrink: 0 }}>{label}</span>
+      <span style={{ fontWeight: 700, textAlign: "end" }}>{value}</span>
     </div>
   );
 }
