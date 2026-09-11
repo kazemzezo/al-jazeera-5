@@ -3,7 +3,10 @@ import { useAuth } from "../context/AuthContext";
 import { useGuestPrompt } from "../context/GuestPromptContext";
 import { ROLES, canReserve as canReserveRole } from "../lib/roles";
 import { LOCATIONS, SALE_TYPES } from "../lib/catalog";
-import { requestVerification } from "../lib/verification";
+import {
+  requestVerification,
+  subscribeMyLatestVerification,
+} from "../lib/verification";
 import {
   subscribeListings,
   subscribeTonPrices,
@@ -19,18 +22,25 @@ import AddListingForm from "../components/AddListingForm";
 export default function Home() {
   const { user, profile, role } = useAuth();
   const { promptLogin, promptVerification } = useGuestPrompt();
-  const [sent, setSent] = useState(false);
   const [location, setLocation] = useState(LOCATIONS.DOCK);
   const [listings, setListings] = useState([]);
   const [tonPrices, setTonPrices] = useState({});
   const [notice, setNotice] = useState("");
+  const [noticeType, setNoticeType] = useState("success");
+  const [myVerif, setMyVerif] = useState(null);
+  const [sending, setSending] = useState(false);
 
   const isUnverifiedTrader = role === ROLES.TRADER;
-  const canManage = role === ROLES.ADMIN || (role === ROLES.SUPERVISOR && location === LOCATIONS.DOCK);
+  const canManage =
+    role === ROLES.ADMIN ||
+    (role === ROLES.SUPERVISOR && location === LOCATIONS.DOCK);
 
   const showDemo = listings.length === 0;
-  const displayListings = showDemo ? DEMO_LISTINGS.filter((l) => l.location === location) : listings;
-  const displayTonPrices = Object.keys(tonPrices).length > 0 ? tonPrices : DEMO_TON_PRICES;
+  const displayListings = showDemo
+    ? DEMO_LISTINGS.filter((l) => l.location === location)
+    : listings;
+  const displayTonPrices =
+    Object.keys(tonPrices).length > 0 ? tonPrices : DEMO_TON_PRICES;
 
   useEffect(() => {
     const unsub = subscribeListings(location, setListings);
@@ -42,19 +52,38 @@ export default function Home() {
     return () => unsub();
   }, []);
 
+  // راقب حالة التوثيق للتاجر
+  useEffect(() => {
+    if (!user) {
+      setMyVerif(null);
+      return;
+    }
+    const unsub = subscribeMyLatestVerification(user.uid, setMyVerif);
+    return () => unsub();
+  }, [user]);
+
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(t);
   }, [notice]);
 
+  function showNotice(text, type = "success") {
+    setNotice(text);
+    setNoticeType(type);
+  }
+
   async function handleRequest() {
+    if (sending) return;
+    setSending(true);
     try {
       await requestVerification(user, profile);
-      setSent(true);
+      showNotice("تم إرسال طلب التوثيق بنجاح. سيتم مراجعته قريبًا.", "success");
     } catch (err) {
-      console.error("تعذر إرسال طلب التوثيق:", err);
-      setNotice("تعذر إرسال طلب التوثيق، حاول مرة أخرى.");
+      console.error(err);
+      showNotice(err.message || "تعذر إرسال الطلب، حاول مرة أخرى.", "error");
+    } finally {
+      setSending(false);
     }
   }
 
@@ -64,29 +93,65 @@ export default function Home() {
       return;
     }
     if (!canReserveRole(role)) {
-      promptVerification("لا يمكنك الحجز بدون توثيق حسابك كتاجر أولاً. تواصل مع إدارة الموقع للتوثيق.");
+      promptVerification("لإتمام الحجز، لازم توثق حسابك أولاً.");
       return;
     }
 
     if (listing.saleType === SALE_TYPES.LOT) {
       const res = await reserveLot(listing.id, user);
-      if (!res.ok) setNotice("تم حجز هذا اللوط بالفعل من تاجر آخر.");
-      else setNotice("تم تأكيد الحجز بنجاح.");
+      if (!res.ok) showNotice("تم حجز هذا اللوط بالفعل من تاجر آخر.", "error");
+      else showNotice("تم تأكيد الحجز بنجاح.");
       return;
     }
 
     const res = await reserveListingQuantity(listing.id, Number(qty || 1), user);
     if (!res.ok) {
-      setNotice(`الكمية المطلوبة أكبر من المتاح. المتاح حاليًا: ${res.available}.`);
+      showNotice(
+        `الكمية المطلوبة أكبر من المتاح. المتاح حاليًا: ${res.available}.`,
+        "error"
+      );
     } else {
-      setNotice("تم تأكيد الحجز بنجاح.");
+      showNotice("تم تأكيد الحجز بنجاح.");
+    }
+  }
+
+  const noticeBg =
+    noticeType === "error" ? "var(--danger-light)" : "var(--kabbash-light)";
+  const noticeBorder =
+    noticeType === "error" ? "var(--danger)" : "var(--kabbash)";
+  const noticeColor =
+    noticeType === "error" ? "var(--danger)" : "var(--ink)";
+
+  // نص بانر التوثيق حسب الحالة
+  let verifText = "";
+  let verifBtnLabel = null;
+  if (isUnverifiedTrader) {
+    if (myVerif?.status === "pending") {
+      verifText = "طلب التوثيق تحت المراجعة ⏳ — سيتم إشعارك عند الرد.";
+    } else if (myVerif?.status === "rejected") {
+      verifText = `تم رفض طلب التوثيق${myVerif.rejectReason ? ": " + myVerif.rejectReason : ""}`;
+      verifBtnLabel = "إعادة إرسال الطلب";
+    } else {
+      verifText =
+        "حسابك غير موثق حاليًا. يمكنك استخدام أدوات الحساب للاطلاع فقط. للحجز، أرسل طلب توثيق.";
+      verifBtnLabel = "طلب التوثيق الآن";
     }
   }
 
   return (
     <div>
       {notice && (
-        <div style={{ background: "var(--kabbash-light)", border: "1px solid var(--kabbash)", borderRadius: "var(--radius)", padding: "10px 14px", marginBottom: 14, fontSize: 13 }}>
+        <div
+          style={{
+            background: noticeBg,
+            border: `1px solid ${noticeBorder}`,
+            color: noticeColor,
+            borderRadius: "var(--radius)",
+            padding: "10px 14px",
+            marginBottom: 14,
+            fontSize: 13,
+          }}
+        >
           {notice}
         </div>
       )}
@@ -106,13 +171,12 @@ export default function Home() {
             flexWrap: "wrap",
           }}
         >
-          <span style={{ fontSize: 14 }}>
-            حسابك غير موثق حاليًا، يمكنك استخدام أدوات الحساب للاطلاع فقط. للحجز
-            والشراء، تواصل مع إدارة الموقع للتوثيق.
-          </span>
-          <button className="btn" onClick={handleRequest} disabled={sent}>
-            {sent ? "تم إرسال الطلب" : "طلب التوثيق الآن"}
-          </button>
+          <span style={{ fontSize: 14, lineHeight: 1.7 }}>{verifText}</span>
+          {verifBtnLabel && myVerif?.status !== "pending" && (
+            <button className="btn" onClick={handleRequest} disabled={sending}>
+              {sending ? "جاري الإرسال..." : verifBtnLabel}
+            </button>
+          )}
         </div>
       )}
 
@@ -159,7 +223,13 @@ export default function Home() {
           {location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}.
         </p>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 12,
+          }}
+        >
           {displayListings.map((l) => (
             <ListingCard
               key={l.id}
