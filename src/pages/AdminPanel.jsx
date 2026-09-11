@@ -10,7 +10,7 @@ import {
   setEquipmentPrice,
 } from "../lib/listings";
 import {
-  subscribeVerificationsByStatus,
+  subscribeAllVerifications,
   approveVerification,
   rejectVerification,
 } from "../lib/verification";
@@ -35,6 +35,11 @@ export default function AdminPanel() {
       {tab === "equipment" && <EquipmentTab uid={user.uid} />}
       {tab === "verification" && <VerificationTab />}
       {tab === "messages" && <MessagesTab />}
+
+      <style>{`
+        .admin-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+        .admin-row .unit { color: var(--steel-light); font-size: 12px; }
+      `}</style>
     </div>
   );
 }
@@ -134,15 +139,26 @@ function EquipmentTab({ uid }) {
 
 function VerificationTab() {
   const [filter, setFilter] = useState("pending");
-  const [requests, setRequests] = useState([]);
+  const [allRequests, setAllRequests] = useState([]);
   const [busyId, setBusyId] = useState(null);
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const unsub = subscribeVerificationsByStatus(filter, setRequests);
+    const unsub = subscribeAllVerifications(
+      setAllRequests,
+      (err) => {
+        console.error("فشل تحميل طلبات التوثيق:", err);
+        setError("تعذر تحميل الطلبات. جرب تحديث الصفحة.");
+      }
+    );
     return () => unsub();
-  }, [filter]);
+  }, []);
+
+  const requests = allRequests.filter((r) =>
+    filter === "all" ? true : r.status === filter
+  );
 
   async function handleApprove(req) {
     setBusyId(req.id);
@@ -157,7 +173,7 @@ function VerificationTab() {
     if (!rejectingId) return;
     setBusyId(req.id);
     try {
-      await rejectVerification(req.id, rejectReason.trim());
+      await rejectVerification(req.id, rejectReason.trim(), req.uid);
       setRejectingId(null);
       setRejectReason("");
     } finally {
@@ -172,8 +188,19 @@ function VerificationTab() {
     all: "الكل",
   };
 
+  const counts = {
+    pending: allRequests.filter((r) => r.status === "pending").length,
+    approved: allRequests.filter((r) => r.status === "approved").length,
+    rejected: allRequests.filter((r) => r.status === "rejected").length,
+    all: allRequests.length,
+  };
+
   return (
     <div>
+      {error && (
+        <p style={{ fontSize: 13, color: "var(--danger)", marginBottom: 10 }}>{error}</p>
+      )}
+
       <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
         {["pending", "approved", "rejected", "all"].map((s) => (
           <button
@@ -188,7 +215,7 @@ function VerificationTab() {
             }}
             onClick={() => setFilter(s)}
           >
-            {labels[s]}
+            {labels[s]} ({counts[s]})
           </button>
         ))}
       </div>
@@ -209,8 +236,12 @@ function VerificationTab() {
             >
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
                 <div>
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{req.name || req.email}</p>
-                  <p style={{ margin: "2px 0", fontSize: 12, color: "var(--steel)" }}>{req.email}</p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
+                    {req.name || req.email}
+                  </p>
+                  <p style={{ margin: "2px 0", fontSize: 12, color: "var(--steel)" }}>
+                    {req.email}
+                  </p>
                   {req.phone && (
                     <p style={{ margin: "2px 0", fontSize: 12, color: "var(--steel)" }}>
                       📞 {req.phone}
@@ -240,8 +271,16 @@ function VerificationTab() {
                     </button>
                     <button
                       className="btn"
-                      style={{ padding: "6px 14px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger)" }}
-                      onClick={() => { setRejectingId(req.id); setRejectReason(""); }}
+                      style={{
+                        padding: "6px 14px",
+                        fontSize: 13,
+                        color: "var(--danger)",
+                        borderColor: "var(--danger)",
+                      }}
+                      onClick={() => {
+                        setRejectingId(req.id);
+                        setRejectReason("");
+                      }}
                       disabled={busyId === req.id}
                     >
                       رفض
@@ -269,7 +308,12 @@ function VerificationTab() {
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       className="btn"
-                      style={{ background: "var(--danger)", borderColor: "var(--danger)", color: "#fff", fontSize: 13 }}
+                      style={{
+                        background: "var(--danger)",
+                        borderColor: "var(--danger)",
+                        color: "#fff",
+                        fontSize: 13,
+                      }}
                       onClick={() => confirmReject(req)}
                       disabled={busyId === req.id}
                     >
@@ -278,7 +322,10 @@ function VerificationTab() {
                     <button
                       className="btn"
                       style={{ fontSize: 13 }}
-                      onClick={() => { setRejectingId(null); setRejectReason(""); }}
+                      onClick={() => {
+                        setRejectingId(null);
+                        setRejectReason("");
+                      }}
                     >
                       إلغاء
                     </button>
