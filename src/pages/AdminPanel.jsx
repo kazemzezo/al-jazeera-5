@@ -67,10 +67,16 @@ export default function AdminPanel() {
         <Pill active={tab === "ads"} onClick={() => setTab("ads")}>
           الإعلانات
         </Pill>
-        <Pill active={tab === "verification"} onClick={() => setTab("verification")}>
+        <Pill
+          active={tab === "verification"}
+          onClick={() => setTab("verification")}
+        >
           طلبات التوثيق
         </Pill>
-        <Pill active={tab === "announcements"} onClick={() => setTab("announcements")}>
+        <Pill
+          active={tab === "announcements"}
+          onClick={() => setTab("announcements")}
+        >
           الإعلانات السريعة
         </Pill>
         <Pill active={tab === "prices"} onClick={() => setTab("prices")}>
@@ -100,7 +106,7 @@ export default function AdminPanel() {
   );
 }
 
-/* ===================== الإعلانات الجديدة ===================== */
+/* ===================== الإعلانات ===================== */
 
 function adStatusStyle(status) {
   const base = {
@@ -113,7 +119,11 @@ function adStatusStyle(status) {
     fontWeight: 700,
   };
   if (status === AD_STATUS.ACTIVE)
-    return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+    return {
+      ...base,
+      background: "var(--kabbash-light)",
+      color: "var(--kabbash)",
+    };
   if (status === AD_STATUS.PARTIAL)
     return { ...base, background: "var(--crane-light)", color: "var(--crane)" };
   if (status === AD_STATUS.SOLD_OUT)
@@ -135,13 +145,10 @@ function AdsTab({ uid }) {
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
-    const unsub = subscribeAllAds(
-      setAds,
-      (err) => {
-        console.error("فشل تحميل الإعلانات:", err);
-        setError("تعذر تحميل الإعلانات.");
-      }
-    );
+    const unsub = subscribeAllAds(setAds, (err) => {
+      console.error("فشل تحميل الإعلانات:", err);
+      setError("تعذر تحميل الإعلانات.");
+    });
     return () => unsub();
   }, []);
 
@@ -168,10 +175,14 @@ function AdsTab({ uid }) {
   const counts = useMemo(
     () => ({
       all: ads.length,
-      [AD_STATUS.ACTIVE]: ads.filter((a) => a.status === AD_STATUS.ACTIVE).length,
-      [AD_STATUS.PARTIAL]: ads.filter((a) => a.status === AD_STATUS.PARTIAL).length,
-      [AD_STATUS.SOLD_OUT]: ads.filter((a) => a.status === AD_STATUS.SOLD_OUT).length,
-      [AD_STATUS.CLOSED]: ads.filter((a) => a.status === AD_STATUS.CLOSED).length,
+      [AD_STATUS.ACTIVE]: ads.filter((a) => a.status === AD_STATUS.ACTIVE)
+        .length,
+      [AD_STATUS.PARTIAL]: ads.filter((a) => a.status === AD_STATUS.PARTIAL)
+        .length,
+      [AD_STATUS.SOLD_OUT]: ads.filter((a) => a.status === AD_STATUS.SOLD_OUT)
+        .length,
+      [AD_STATUS.CLOSED]: ads.filter((a) => a.status === AD_STATUS.CLOSED)
+        .length,
     }),
     [ads]
   );
@@ -259,13 +270,32 @@ function AdsTab({ uid }) {
 
       {!search.trim() && (
         <>
-          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              marginBottom: 10,
+              flexWrap: "wrap",
+            }}
+          >
             {[
               { k: "all", label: "الكل" },
-              { k: AD_STATUS.ACTIVE, label: AD_STATUS_LABELS[AD_STATUS.ACTIVE] },
-              { k: AD_STATUS.PARTIAL, label: AD_STATUS_LABELS[AD_STATUS.PARTIAL] },
-              { k: AD_STATUS.SOLD_OUT, label: AD_STATUS_LABELS[AD_STATUS.SOLD_OUT] },
-              { k: AD_STATUS.CLOSED, label: AD_STATUS_LABELS[AD_STATUS.CLOSED] },
+              {
+                k: AD_STATUS.ACTIVE,
+                label: AD_STATUS_LABELS[AD_STATUS.ACTIVE],
+              },
+              {
+                k: AD_STATUS.PARTIAL,
+                label: AD_STATUS_LABELS[AD_STATUS.PARTIAL],
+              },
+              {
+                k: AD_STATUS.SOLD_OUT,
+                label: AD_STATUS_LABELS[AD_STATUS.SOLD_OUT],
+              },
+              {
+                k: AD_STATUS.CLOSED,
+                label: AD_STATUS_LABELS[AD_STATUS.CLOSED],
+              },
             ].map((s) => (
               <button
                 key={s.k}
@@ -284,7 +314,14 @@ function AdsTab({ uid }) {
             ))}
           </div>
 
-          <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              marginBottom: 16,
+              flexWrap: "wrap",
+            }}
+          >
             {[
               { k: "all", label: "كل الأقسام" },
               { k: LOCATIONS.DOCK, label: "الرصيف البحري" },
@@ -296,9 +333,11 @@ function AdsTab({ uid }) {
                 style={{
                   fontSize: 12,
                   padding: "5px 12px",
-                  background: locationFilter === s.k ? "var(--kabbash)" : "transparent",
+                  background:
+                    locationFilter === s.k ? "var(--kabbash)" : "transparent",
                   color: locationFilter === s.k ? "#fff" : "var(--ink)",
-                  borderColor: locationFilter === s.k ? "var(--kabbash)" : "var(--line)",
+                  borderColor:
+                    locationFilter === s.k ? "var(--kabbash)" : "var(--line)",
                 }}
                 onClick={() => setLocationFilter(s.k)}
               >
@@ -340,7 +379,14 @@ function AdsTab({ uid }) {
                     flexWrap: "wrap",
                   }}
                 >
-                  <div style={{ display: "flex", gap: 12, flex: 1, minWidth: 240 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      flex: 1,
+                      minWidth: 240,
+                    }}
+                  >
                     {ad.imageUrl ? (
                       <img
                         src={ad.imageUrl}
@@ -426,9 +472,8 @@ function AdsTab({ uid }) {
                         }}
                       >
                         بواسطة {ad.createdByName} ·{" "}
-                        {ad.createdAt
-                          ?.toDate?.()
-                          .toLocaleString("ar-EG") || "—"}
+                        {ad.createdAt?.toDate?.().toLocaleString("ar-EG") ||
+                          "—"}
                       </p>
                     </div>
                   </div>
@@ -578,10 +623,7 @@ function AdsTab({ uid }) {
 
       {showForm && <AddAdForm onClose={() => setShowForm(false)} />}
       {editingAd && (
-        <AddAdForm
-          ad={editingAd}
-          onClose={() => setEditingAd(null)}
-        />
+        <AddAdForm ad={editingAd} onClose={() => setEditingAd(null)} />
       )}
     </div>
   );
@@ -612,9 +654,17 @@ function statusBadgeStyle(status) {
   if (status === "contacted")
     return { ...base, background: "var(--kabbash-light)", color: "var(--steel)" };
   if (status === "in_progress")
-    return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+    return {
+      ...base,
+      background: "var(--kabbash-light)",
+      color: "var(--kabbash)",
+    };
   if (status === "completed")
-    return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+    return {
+      ...base,
+      background: "var(--kabbash-light)",
+      color: "var(--kabbash)",
+    };
   if (status === "cancelled")
     return { ...base, background: "var(--danger-light)", color: "var(--danger)" };
   return base;
@@ -631,13 +681,10 @@ function ReservationsTab({ uid }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const unsub = subscribeAllReservations(
-      setAll,
-      (err) => {
-        console.error("فشل تحميل الحجوزات:", err);
-        setError("تعذر تحميل الحجوزات. جرب تحديث الصفحة.");
-      }
-    );
+    const unsub = subscribeAllReservations(setAll, (err) => {
+      console.error("فشل تحميل الحجوزات:", err);
+      setError("تعذر تحميل الحجوزات. جرب تحديث الصفحة.");
+    });
     return () => unsub();
   }, []);
 
@@ -746,7 +793,14 @@ function ReservationsTab({ uid }) {
         style={{ marginBottom: 12 }}
       />
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}
+      >
         {["new", "contacted", "in_progress", "completed", "cancelled", "all"].map(
           (s) => (
             <button
@@ -842,7 +896,9 @@ function ReservationsTab({ uid }) {
                         {r.location === LOCATIONS.DOCK ? "الرصيف" : "الساحة"}
                       </>
                     ) : r.type === "ad" ? (
-                      <>{r.adTitle || "إعلان"} · {r.items?.length || 0} صنف</>
+                      <>
+                        {r.adTitle || "إعلان"} · {r.items?.length || 0} صنف
+                      </>
                     ) : (
                       <>
                         {r.category} · {r.qty}{" "}
@@ -890,9 +946,7 @@ function ReservationsTab({ uid }) {
                     {Number(r.grandTotal || 0).toLocaleString("ar-EG")}ج
                   </span>
 
-                  <div
-                    style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
-                  >
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button
                       className="btn"
                       style={{ fontSize: 12, padding: "5px 12px" }}
@@ -1059,7 +1113,7 @@ function InvoiceAdminActions({ invoice, onBack, onStatusChange }) {
   );
 }
 
-/* ===================== الإعلانات السريعة (Announcements) ===================== */
+/* ===================== الإعلانات السريعة ===================== */
 
 function AnnouncementsTab() {
   const [dock, setDock] = useState([]);
@@ -1155,8 +1209,8 @@ function AnnouncementsTab() {
   return (
     <div>
       <p style={{ fontSize: 13, color: "var(--steel)", marginBottom: 16 }}>
-        الإعلانات السريعة بتتضاف من الصفحة الرئيسية (زر "+ إضافة صنف / إعلان").
-        تقدر تحذف أي إعلان من هنا.
+        الإعلانات السريعة بتتضاف من الصفحة الرئيسية. تقدر تحذف أي إعلان من
+        هنا.
       </p>
       <Section title="الرصيف البحري" items={dock} />
       <Section title="ساحة الجزيره" items={yard} />
@@ -1220,9 +1274,7 @@ function PricesTab({ uid }) {
             <input
               type="number"
               value={values[c] ?? 0}
-              onChange={(e) =>
-                setValues({ ...values, [c]: e.target.value })
-              }
+              onChange={(e) => setValues({ ...values, [c]: e.target.value })}
               style={{
                 width: 110,
                 borderColor: hasChange ? "var(--crane)" : undefined,
@@ -1254,57 +1306,7 @@ function PricesTab({ uid }) {
     </div>
   );
 }
-  const [prices, setPrices] = useState({});
-  const [values, setValues] = useState({});
-  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const unsub = subscribeTonPrices(setPrices);
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
-    const source = Object.keys(prices).length > 0 ? prices : DEMO_TON_PRICES;
-    const v = {};
-    TON_CATEGORIES.forEach((c) => (v[c] = source[c]?.pricePerTon ?? 0));
-    setValues(v);
-  }, [prices]);
-
-  async function saveAll() {
-    setSaving(true);
-    try {
-      await Promise.all(
-        TON_CATEGORIES.map((c) => setTonPrice(c, values[c] || 0, uid))
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div>
-      {TON_CATEGORIES.map((c) => (
-        <div key={c} className="admin-row">
-          <span style={{ flex: 1 }}>{c}</span>
-          <span className="unit">ج/طن</span>
-          <input
-            type="number"
-            value={values[c] ?? 0}
-            onChange={(e) => setValues({ ...values, [c]: e.target.value })}
-            style={{ width: 110 }}
-          />
-        </div>
-      ))}
-      <button
-        className="btn btn-primary"
-        style={{ marginTop: 14 }}
-        onClick={saveAll}
-        disabled={saving}
-      >
-        {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
-      </button>
-    </div>
-  );
 /* ===================== المعدات ===================== */
 
 function EquipmentTab({ uid }) {
@@ -1434,7 +1436,14 @@ function VerificationTab() {
         </p>
       )}
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          marginBottom: 14,
+          flexWrap: "wrap",
+        }}
+      >
         {["pending", "approved", "rejected", "all"].map((s) => (
           <button
             key={s}
@@ -1561,10 +1570,7 @@ function VerificationTab() {
                 )}
 
                 {req.status === "approved" && (
-                  <span
-                    className="badge"
-                    style={{ alignSelf: "flex-start" }}
-                  >
+                  <span className="badge" style={{ alignSelf: "flex-start" }}>
                     ✅ موثق
                   </span>
                 )}
@@ -1681,7 +1687,13 @@ function MessagesTab() {
               </span>
             )}
           </div>
-          <p style={{ margin: "0 0 6px", fontSize: 12, color: "var(--steel)" }}>
+          <p
+            style={{
+              margin: "0 0 6px",
+              fontSize: 12,
+              color: "var(--steel)",
+            }}
+          >
             {m.email}
           </p>
           <p style={{ margin: 0, fontSize: 13 }}>{m.text}</p>
