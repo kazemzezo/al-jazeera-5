@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { deleteDoc, doc } from "firebase/firestore";
 import { deleteUser } from "firebase/auth";
 import { useAuth } from "../context/AuthContext";
+import { useGuestPrompt } from "../context/GuestPromptContext";
 import { db } from "../lib/firebase";
 import { ROLES } from "../lib/roles";
+import { subscribeMyLatestVerification } from "../lib/verification";
 
 const ROLE_LABELS = {
   [ROLES.ADMIN]: "أدمن",
@@ -18,10 +20,22 @@ const ROLE_LABELS = {
 
 export default function Profile() {
   const { user, profile, role } = useAuth();
+  const { promptVerification } = useGuestPrompt();
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [verification, setVerification] = useState(null);
+  const [loadingVerif, setLoadingVerif] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeMyLatestVerification(user.uid, (v) => {
+      setVerification(v);
+      setLoadingVerif(false);
+    });
+    return () => unsub();
+  }, [user]);
 
   async function handleDelete() {
     setDeleting(true);
@@ -40,24 +54,73 @@ export default function Profile() {
     }
   }
 
-  return (
-    <div style={{ maxWidth: 480 }}>
-      <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 16 }}>حسابي</h1>
+  const isVerified = role === ROLES.VERIFIED_TRADER || role === ROLES.ADMIN;
 
-      <div style={{ background: "var(--paper-raised)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 18, marginBottom: 20 }}>
+  return (
+    <div style={{ maxWidth: 520 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 16 }}>حسابي</h1>
+
+      <div
+        style={{
+          background: "var(--paper-raised)",
+          border: "1px solid var(--line)",
+          borderRadius: "var(--radius-lg)",
+          padding: 18,
+          marginBottom: 16,
+        }}
+      >
         <Row label="الاسم" value={profile?.name || "—"} />
         <Row label="البريد الإلكتروني" value={user?.email} />
         <Row label="نوع الحساب" value={ROLE_LABELS[role] || "—"} />
       </div>
 
-      <div style={{ background: "var(--paper-raised)", border: "1px solid var(--danger)", borderRadius: "var(--radius)", padding: 18 }}>
+      {!isVerified ? (
+        <div
+          style={{
+            background: "var(--paper-raised)",
+            border: "1px solid var(--line)",
+            borderRadius: "var(--radius-lg)",
+            padding: 18,
+            marginBottom: 16,
+          }}
+        >
+          <p style={{ fontSize: 14, fontWeight: 800, margin: "0 0 10px" }}>
+            حالة التوثيق
+          </p>
+          <VerificationStatus
+            loading={loadingVerif}
+            verification={verification}
+            onRequest={() => promptVerification("")}
+          />
+        </div>
+      ) : (
+        <div
+          className="badge"
+          style={{ display: "inline-flex", padding: "10px 16px", fontSize: 13, marginBottom: 16 }}
+        >
+          ✅ حسابك موثق — يمكنك تأكيد الحجوزات
+        </div>
+      )}
+
+      <div
+        style={{
+          background: "var(--paper-raised)",
+          border: "1px solid var(--danger)",
+          borderRadius: "var(--radius-lg)",
+          padding: 18,
+        }}
+      >
         <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>حذف الحساب</p>
         <p style={{ fontSize: 12, color: "var(--steel)", marginBottom: 12 }}>
           حذف حسابك نهائي وسيؤدي لمسح بياناتك بالكامل من الموقع، ولا يمكن التراجع عنه.
         </p>
 
         {!confirming ? (
-          <button className="btn" style={{ borderColor: "var(--danger)", color: "var(--danger)" }} onClick={() => setConfirming(true)}>
+          <button
+            className="btn"
+            style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+            onClick={() => setConfirming(true)}
+          >
             حذف الحساب
           </button>
         ) : (
@@ -87,9 +150,75 @@ export default function Profile() {
   );
 }
 
+function VerificationStatus({ loading, verification, onRequest }) {
+  if (loading) {
+    return <p style={{ fontSize: 13, color: "var(--steel)", margin: 0 }}>جاري التحميل...</p>;
+  }
+
+  if (!verification) {
+    return (
+      <div>
+        <p style={{ fontSize: 13, color: "var(--steel)", margin: "0 0 12px", lineHeight: 1.7 }}>
+          حسابك غير موثق حاليًا، وبالتالي لا يمكنك تأكيد أي حجز. أرسل طلب توثيق وهيتم مراجعته من الإدارة.
+        </p>
+        <button className="btn btn-primary" onClick={onRequest}>أرسل طلب توثيق</button>
+      </div>
+    );
+  }
+
+  if (verification.status === "pending") {
+    return (
+      <div>
+        <div className="badge badge-warn" style={{ padding: "8px 14px", fontSize: 13 }}>
+          ⏳ طلبك تحت المراجعة
+        </div>
+        <p style={{ fontSize: 12.5, color: "var(--steel)", margin: "10px 0 0" }}>
+          تم إرسال طلبك بتاريخ {verification.createdAt?.toDate?.().toLocaleDateString("ar-EG") || "—"} وسيتم إشعارك عند الرد.
+        </p>
+      </div>
+    );
+  }
+
+  if (verification.status === "rejected") {
+    return (
+      <div>
+        <div className="badge badge-danger" style={{ padding: "8px 14px", fontSize: 13 }}>
+          ❌ تم رفض الطلب
+        </div>
+        {verification.rejectReason && (
+          <p style={{ fontSize: 13, color: "var(--ink)", margin: "10px 0 12px" }}>
+            <b>السبب:</b> {verification.rejectReason}
+          </p>
+        )}
+        <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={onRequest}>
+          إعادة إرسال الطلب
+        </button>
+      </div>
+    );
+  }
+
+  if (verification.status === "approved") {
+    return (
+      <div className="badge" style={{ padding: "8px 14px", fontSize: 13 }}>
+        ✅ حسابك موثق
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function Row({ label, value }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13, borderBottom: "1px solid var(--line)" }}>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "8px 0",
+        fontSize: 13,
+        borderBottom: "1px solid var(--line)",
+      }}
+    >
       <span style={{ color: "var(--steel)" }}>{label}</span>
       <span style={{ fontWeight: 700 }}>{value}</span>
     </div>
