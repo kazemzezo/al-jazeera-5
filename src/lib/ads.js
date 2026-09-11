@@ -19,10 +19,10 @@ import { db } from "./firebase";
 
 // حالات الإعلان
 export const AD_STATUS = {
-  ACTIVE: "active",        // متاح
-  PARTIAL: "partial",      // بعض الأصناف خلصت
-  SOLD_OUT: "sold_out",    // كل الأصناف خلصت
-  CLOSED: "closed",        // تم الغلق من الإدارة
+  ACTIVE: "active",
+  PARTIAL: "partial",
+  SOLD_OUT: "sold_out",
+  CLOSED: "closed",
 };
 
 export const AD_STATUS_LABELS = {
@@ -34,7 +34,6 @@ export const AD_STATUS_LABELS = {
 
 // ============ قراءة ============
 
-// كل الإعلانات (للأدمن)
 export function subscribeAllAds(callback, onError) {
   return onSnapshot(
     collection(db, "ads"),
@@ -51,7 +50,6 @@ export function subscribeAllAds(callback, onError) {
   );
 }
 
-// إعلانات قسم معين (dock / yard)
 export function subscribeAds(location, callback, onError) {
   return onSnapshot(
     collection(db, "ads"),
@@ -70,7 +68,6 @@ export function subscribeAds(location, callback, onError) {
   );
 }
 
-// كل الإعلانات المتاحة بس (للعرض في الرئيسية)
 export function subscribeActiveAds(callback, onError) {
   return onSnapshot(
     collection(db, "ads"),
@@ -93,7 +90,6 @@ export function subscribeActiveAds(callback, onError) {
   );
 }
 
-// إعلان واحد بالتفصيل
 export function subscribeAd(id, callback, onError) {
   if (!id) {
     callback(null);
@@ -111,7 +107,6 @@ export function subscribeAd(id, callback, onError) {
 
 // ============ كتابة ============
 
-// إنشاء إعلان جديد
 export async function createAd(ad, user) {
   const items = (ad.items || []).map((it) => ({
     category: it.category,
@@ -124,7 +119,7 @@ export async function createAd(ad, user) {
     title: ad.title?.trim() || "",
     description: ad.description?.trim() || "",
     imageUrl: ad.imageUrl?.trim() || "",
-    location: ad.location, // dock / yard
+    location: ad.location,
     items,
     status: AD_STATUS.ACTIVE,
     createdBy: user.uid,
@@ -134,7 +129,6 @@ export async function createAd(ad, user) {
   return ref.id;
 }
 
-// تعديل إعلان (مثلاً: العنوان، الوصف، الصورة)
 export async function updateAd(id, updates, uid) {
   await updateDoc(doc(db, "ads", id), {
     ...updates,
@@ -143,7 +137,6 @@ export async function updateAd(id, updates, uid) {
   });
 }
 
-// حساب الحالة الجديدة بعد الحجز
 export function computeAdStatus(items) {
   if (!items || items.length === 0) return AD_STATUS.SOLD_OUT;
   const allSoldOut = items.every(
@@ -154,9 +147,7 @@ export function computeAdStatus(items) {
   return anyReserved ? AD_STATUS.PARTIAL : AD_STATUS.ACTIVE;
 }
 
-// تحديث كمية محجوزة في إعلان (يُستخدم عند الموافقة على حجز)
 export async function applyReservationToAd(adId, reservedItems) {
-  // reservedItems: [{ category, qty }]
   const adRef = doc(db, "ads", adId);
   const snap = await getDoc(adRef);
   if (!snap.exists()) throw new Error("الإعلان غير موجود");
@@ -178,7 +169,6 @@ export async function applyReservationToAd(adId, reservedItems) {
   return newStatus;
 }
 
-// غلق إعلان يدوياً (من الأدمن)
 export async function closeAd(id, uid) {
   await updateDoc(doc(db, "ads", id), {
     status: AD_STATUS.CLOSED,
@@ -187,7 +177,6 @@ export async function closeAd(id, uid) {
   });
 }
 
-// إعادة فتح إعلان مغلق (من الأدمن)
 export async function reopenAd(id, uid) {
   const adRef = doc(db, "ads", id);
   const snap = await getDoc(adRef);
@@ -201,14 +190,12 @@ export async function reopenAd(id, uid) {
   });
 }
 
-// حذف إعلان (من الأدمن) — نهائي
 export async function deleteAd(id) {
   await deleteDoc(doc(db, "ads", id));
 }
 
 // ============ مساعدات ============
 
-// إجمالي قيمة الإعلان
 export function getAdTotal(ad) {
   if (!ad?.items) return 0;
   return ad.items.reduce(
@@ -217,15 +204,11 @@ export function getAdTotal(ad) {
   );
 }
 
-// هل الإعلان قابل للحجز؟
 export function isAdReservable(ad) {
   if (!ad) return false;
-  return (
-    ad.status === AD_STATUS.ACTIVE || ad.status === AD_STATUS.PARTIAL
-  );
+  return ad.status === AD_STATUS.ACTIVE || ad.status === AD_STATUS.PARTIAL;
 }
 
-// الأصناف المتاحة للحجز
 export function getAvailableItems(ad) {
   if (!ad?.items) return [];
   return ad.items
@@ -234,4 +217,38 @@ export function getAvailableItems(ad) {
       available: Number(it.qty || 0) - Number(it.reservedQty || 0),
     }))
     .filter((it) => it.available > 0);
+}
+
+// ============ الحجوزات (جديد) ============
+
+// إنشاء حجز جديد على إعلان
+export async function createAdReservation(payload, user) {
+  const items = (payload.items || []).filter((it) => Number(it.qty) > 0);
+  const equipment = (payload.equipment || []).filter(
+    (eq) => Number(eq.hours) > 0
+  );
+
+  const ref = await addDoc(collection(db, "reservations"), {
+    type: "ad",
+    adId: payload.adId,
+    adTitle: payload.adTitle,
+    location: payload.location,
+    items,
+    equipment,
+    workerCount: Number(payload.workerCount || 0),
+    workerUnitPrice: Number(payload.workerUnitPrice || 0),
+    carCount: Number(payload.carCount || 0),
+    carUnitPrice: Number(payload.carUnitPrice || 0),
+    itemsTotal: Number(payload.itemsTotal || 0),
+    equipmentTotal: Number(payload.equipmentTotal || 0),
+    workersTotal: Number(payload.workersTotal || 0),
+    carsTotal: Number(payload.carsTotal || 0),
+    grandTotal: Number(payload.grandTotal || 0),
+    uid: user.uid,
+    traderName: payload.traderName || user.displayName || user.email,
+    traderEmail: user.email || "",
+    status: "new",
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
 }
