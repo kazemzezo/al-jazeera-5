@@ -1196,6 +1196,93 @@ function PricesTab({ uid }) {
 
   return (
     <div>
+      {TON_CATEGORIES.map((c) => {
+        const currentData = prices[c];
+        const currentPrice = currentData?.pricePerTon ?? 0;
+        const newPrice = values[c] ?? 0;
+        const hasChange = Number(newPrice) !== Number(currentPrice);
+
+        return (
+          <div key={c} className="admin-row">
+            <span style={{ flex: 1 }}>{c}</span>
+            {currentData && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--steel-light)",
+                  marginInlineEnd: 6,
+                }}
+              >
+                الحالي: {Number(currentPrice).toLocaleString("ar-EG")}
+              </span>
+            )}
+            <span className="unit">ج/طن</span>
+            <input
+              type="number"
+              value={values[c] ?? 0}
+              onChange={(e) =>
+                setValues({ ...values, [c]: e.target.value })
+              }
+              style={{
+                width: 110,
+                borderColor: hasChange ? "var(--crane)" : undefined,
+              }}
+            />
+          </div>
+        );
+      })}
+      <button
+        className="btn btn-primary"
+        style={{ marginTop: 14 }}
+        onClick={saveAll}
+        disabled={saving}
+      >
+        {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
+      </button>
+      <p
+        style={{
+          fontSize: 11.5,
+          color: "var(--steel-light)",
+          marginTop: 10,
+          lineHeight: 1.7,
+        }}
+      >
+        ملاحظة: الحقول اللي لونها ذهبي فيها تعديل لم يُحفظ بعد. المؤشرات في
+        شريط الأسعار هتتحدّث تلقائياً (⬆ أخضر للارتفاع، ⬇ أحمر للانخفاض، ▬
+        أصفر للثبات 5 أيام).
+      </p>
+    </div>
+  );
+}
+  const [prices, setPrices] = useState({});
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeTonPrices(setPrices);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const source = Object.keys(prices).length > 0 ? prices : DEMO_TON_PRICES;
+    const v = {};
+    TON_CATEGORIES.forEach((c) => (v[c] = source[c]?.pricePerTon ?? 0));
+    setValues(v);
+  }, [prices]);
+
+  async function saveAll() {
+    setSaving(true);
+    try {
+      await Promise.all(
+        TON_CATEGORIES.map((c) => setTonPrice(c, values[c] || 0, uid))
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
       {TON_CATEGORIES.map((c) => (
         <div key={c} className="admin-row">
           <span style={{ flex: 1 }}>{c}</span>
