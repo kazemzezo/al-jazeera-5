@@ -77,17 +77,21 @@ export default function CompleteProfileForm({ onClose, forceMode = false }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <Field label="الاسم الكامل" required>
+          <Field
+            label="الاسم الكامل"
+            required
+            hint="الاسم رباعي كما في البطاقة"
+          >
             <input
               className="input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="مثال: أحمد محمد علي"
+              placeholder="مثال: أحمد محمد علي إبراهيم"
               autoFocus
             />
           </Field>
 
-          <Field label="رقم الهاتف" required>
+          <Field label="رقم الهاتف" required hint="مثال: 01012345678">
             <input
               className="input"
               type="tel"
@@ -257,7 +261,7 @@ export default function CompleteProfileForm({ onClose, forceMode = false }) {
   );
 }
 
-function Field({ label, required, children }) {
+function Field({ label, required, hint, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <label
@@ -272,6 +276,18 @@ function Field({ label, required, children }) {
         {label} {required && <span style={{ color: "var(--danger)" }}>*</span>}
       </label>
       {children}
+      {hint && (
+        <p
+          style={{
+            fontSize: 11.5,
+            color: "var(--steel-light)",
+            margin: "4px 0 0",
+            lineHeight: 1.5,
+          }}
+        >
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
