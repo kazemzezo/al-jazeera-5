@@ -7,7 +7,6 @@ import { EQUIPMENT, TOTAL_WORKERS } from "../lib/equipment";
 import { DEMO_TON_PRICES } from "../lib/demoData";
 import { subscribeTonPrices, subscribeEquipmentPrices } from "../lib/listings";
 
-// سعر تحميل الطن الواحد (للعامل أو أكثر) — عدّله من هنا لو حبيت
 const LOADING_PRICE_PER_TON = 30;
 
 function fmt(n) {
@@ -28,6 +27,11 @@ export default function Calculator() {
 
   const [liveTonPrices, setLiveTonPrices] = useState({});
   const [liveEquipmentPrices, setLiveEquipmentPrices] = useState({});
+
+  // ✅ مسح الفاتورة لما المستخدم يسجل خروج
+  useEffect(() => {
+    if (!user) setConfirmedInvoice(null);
+  }, [user]);
 
   useEffect(() => {
     const unsub = subscribeTonPrices(setLiveTonPrices);
@@ -78,7 +82,6 @@ export default function Calculator() {
   );
   const equipmentTotal = equipmentRows.reduce((s, r) => s + r.total, 0);
 
-  // سعر التحميل: عدد الأطنان × 30ج (لا يعتمد على عدد العمال)
   const loadingTotal = Number(loadingTons || 0) * LOADING_PRICE_PER_TON;
 
   const maintenanceFee = SITE_MAINTENANCE_FEE[location];
@@ -385,7 +388,7 @@ export default function Calculator() {
 function InvoiceView({ invoice, onBack }) {
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 8 }}>
         <button className="btn" onClick={onBack}>عودة للأداة</button>
         <button className="btn btn-primary" onClick={() => window.print()}>طباعة / حفظ PDF</button>
       </div>
@@ -398,7 +401,7 @@ function InvoiceView({ invoice, onBack }) {
           </p>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, fontSize: 13 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, fontSize: 13, flexWrap: "wrap", gap: 8 }}>
           <span><b>اسم التاجر:</b> {invoice.traderName}</span>
           <span><b>الموقع:</b> {invoice.location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}</span>
         </div>
@@ -437,9 +440,27 @@ function InvoiceView({ invoice, onBack }) {
 
       <style>{`
         @media print {
-          .no-print, header, nav { display: none !important; }
-          main { padding: 0 !important; max-width: 100% !important; }
-          #invoice-print { border: none !important; }
+          /* اخفي كل حاجة في الصفحة */
+          body * { visibility: hidden !important; }
+          /* اظهر الفاتورة بس */
+          #invoice-print, #invoice-print * { visibility: visible !important; }
+          /* خلي الفاتورة تشغل الصفحة كاملة من أولها */
+          #invoice-print {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            border: none !important;
+            border-radius: 0 !important;
+            padding: 16px !important;
+            margin: 0 !important;
+            background: #fff !important;
+            color: #000 !important;
+          }
+          /* امنع فصل الفاتورة على أكتر من صفحة */
+          #invoice-print { page-break-inside: avoid; }
+          @page { margin: 12mm; }
         }
       `}</style>
     </div>
