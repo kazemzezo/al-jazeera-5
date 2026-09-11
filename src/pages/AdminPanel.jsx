@@ -26,7 +26,6 @@ export default function AdminPanel() {
   const [tab, setTab] = useState("reservations");
   const [newCount, setNewCount] = useState(0);
 
-  // نحسب عدد الحجوزات الجديدة لعرض badge على التاب
   useEffect(() => {
     const unsub = subscribeAllReservations((items) => {
       setNewCount(items.filter((r) => r.status === "new").length);
@@ -118,19 +117,18 @@ function ReservationsTab({ uid }) {
     const unsub = subscribeAllReservations(
       setAll,
       (err) => {
-        console.error(err);
+        console.error("فشل تحميل الحجوزات:", err);
         setError("تعذر تحميل الحجوزات. جرب تحديث الصفحة.");
       }
     );
     return () => unsub();
   }, []);
 
+  // ✅ البحث بيتجاهل الفلتر لما يكون مكتوب فيه حاجة
   const filtered = useMemo(() => {
-    let list = all;
-    if (filter !== "all") list = list.filter((r) => r.status === filter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(
+      return all.filter(
         (r) =>
           (r.traderName || "").toLowerCase().includes(q) ||
           (r.traderEmail || "").toLowerCase().includes(q) ||
@@ -138,7 +136,8 @@ function ReservationsTab({ uid }) {
           (r.invoiceId || "").toLowerCase().includes(q)
       );
     }
-    return list;
+    if (filter === "all") return all;
+    return all.filter((r) => r.status === filter);
   }, [all, filter, search]);
 
   const counts = useMemo(
@@ -154,11 +153,14 @@ function ReservationsTab({ uid }) {
 
   async function setStatus(id, status) {
     setBusyId(id);
+    setError("");
     try {
       await updateReservationStatus(id, status, { uid });
     } catch (err) {
-      console.error(err);
-      setError("تعذر تحديث حالة الحجز.");
+      console.error("خطأ تحديث حالة الحجز:", err);
+      setError(
+        `تعذر تحديث الحالة: ${err.message || err.code || "خطأ غير معروف"}`
+      );
     } finally {
       setBusyId(null);
     }
@@ -166,6 +168,7 @@ function ReservationsTab({ uid }) {
 
   async function confirmCancel(id) {
     setBusyId(id);
+    setError("");
     try {
       await updateReservationStatus(id, "cancelled", {
         uid,
@@ -174,8 +177,10 @@ function ReservationsTab({ uid }) {
       setCancelingId(null);
       setCancelReason("");
     } catch (err) {
-      console.error(err);
-      setError("تعذر إلغاء الحجز.");
+      console.error("خطأ إلغاء الحجز:", err);
+      setError(
+        `تعذر إلغاء الحجز: ${err.message || err.code || "خطأ غير معروف"}`
+      );
     } finally {
       setBusyId(null);
     }
@@ -186,7 +191,13 @@ function ReservationsTab({ uid }) {
       <InvoiceView
         invoice={viewing}
         onBack={() => setViewing(null)}
-        adminActions={<InvoiceAdminActions invoice={viewing} uid={uid} onBack={() => setViewing(null)} onStatusChange={(s) => setStatus(viewing.id, s)} />}
+        adminActions={
+          <InvoiceAdminActions
+            invoice={viewing}
+            onBack={() => setViewing(null)}
+            onStatusChange={(s) => setStatus(viewing.id, s)}
+          />
+        }
       />
     );
   }
@@ -194,10 +205,22 @@ function ReservationsTab({ uid }) {
   return (
     <div>
       {error && (
-        <p style={{ fontSize: 13, color: "var(--danger)", marginBottom: 10 }}>{error}</p>
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--danger)",
+            background: "var(--danger-light)",
+            border: "1px solid var(--danger)",
+            borderRadius: "var(--radius)",
+            padding: "10px 14px",
+            marginBottom: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          {error}
+        </div>
       )}
 
-      {/* بحث */}
       <input
         className="input"
         placeholder="ابحث باسم التاجر أو الإيميل أو الصنف أو رقم الفاتورة..."
@@ -206,7 +229,6 @@ function ReservationsTab({ uid }) {
         style={{ marginBottom: 12 }}
       />
 
-      {/* فلاتر الحالة */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         {["new", "contacted", "completed", "cancelled", "all"].map((s) => (
           <button
@@ -227,7 +249,9 @@ function ReservationsTab({ uid }) {
       </div>
 
       {filtered.length === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--steel)" }}>لا توجد حجوزات في هذه الحالة.</p>
+        <p style={{ fontSize: 13, color: "var(--steel)" }}>
+          {search.trim() ? "لا توجد نتائج مطابقة للبحث." : "لا توجد حجوزات في هذه الحالة."}
+        </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {filtered.map((r) => (
@@ -240,7 +264,14 @@ function ReservationsTab({ uid }) {
                 padding: 14,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 10,
+                }}
+              >
                 <div style={{ minWidth: 200 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={statusBadgeStyle(r.status)}>
@@ -261,11 +292,17 @@ function ReservationsTab({ uid }) {
                   <p style={{ margin: "4px 0 0", fontSize: 12.5 }}>
                     {r.type === "calculator" ? (
                       <>
-                        فاتورة من الحاسبة · {r.location === LOCATIONS.DOCK ? "الرصيف" : "الساحة"}
+                        فاتورة من الحاسبة ·{" "}
+                        {r.location === LOCATIONS.DOCK ? "الرصيف" : "الساحة"}
                       </>
                     ) : (
                       <>
-                        {r.category} · {r.qty} {r.saleType === "lot" ? "لوط" : r.saleType === "piece" ? "قطعة" : "طن"}
+                        {r.category} · {r.qty}{" "}
+                        {r.saleType === "lot"
+                          ? "لوط"
+                          : r.saleType === "piece"
+                          ? "قطعة"
+                          : "طن"}
                       </>
                     )}
                   </p>
@@ -281,7 +318,14 @@ function ReservationsTab({ uid }) {
                   )}
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-end",
+                    gap: 6,
+                  }}
+                >
                   <span style={{ fontSize: 18, fontWeight: 900 }}>
                     {Number(r.grandTotal || 0).toLocaleString("ar-EG")}ج
                   </span>
@@ -302,7 +346,7 @@ function ReservationsTab({ uid }) {
                         onClick={() => setStatus(r.id, "contacted")}
                         disabled={busyId === r.id}
                       >
-                        تم التواصل
+                        {busyId === r.id ? "..." : "تم التواصل"}
                       </button>
                     )}
 
@@ -313,7 +357,7 @@ function ReservationsTab({ uid }) {
                         onClick={() => setStatus(r.id, "completed")}
                         disabled={busyId === r.id}
                       >
-                        إتمام
+                        {busyId === r.id ? "..." : "إتمام"}
                       </button>
                     )}
 
@@ -340,7 +384,13 @@ function ReservationsTab({ uid }) {
               </div>
 
               {cancelingId === r.id && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
+                <div
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 12,
+                    borderTop: "1px dashed var(--line)",
+                  }}
+                >
                   <input
                     className="input"
                     placeholder="سبب الإلغاء (اختياري)"
@@ -360,7 +410,7 @@ function ReservationsTab({ uid }) {
                       onClick={() => confirmCancel(r.id)}
                       disabled={busyId === r.id}
                     >
-                      تأكيد الإلغاء (سيرجع للمخزون)
+                      {busyId === r.id ? "جاري الإلغاء..." : "تأكيد الإلغاء"}
                     </button>
                     <button
                       className="btn"
@@ -373,6 +423,9 @@ function ReservationsTab({ uid }) {
                       تراجع
                     </button>
                   </div>
+                  <p style={{ fontSize: 11.5, color: "var(--steel)", margin: "8px 0 0" }}>
+                    ملاحظة: إلغاء الحجز سيرجّع الكمية للمخزون تلقائياً.
+                  </p>
                 </div>
               )}
             </div>
@@ -383,7 +436,7 @@ function ReservationsTab({ uid }) {
   );
 }
 
-function InvoiceAdminActions({ invoice, uid, onBack, onStatusChange }) {
+function InvoiceAdminActions({ invoice, onBack, onStatusChange }) {
   return (
     <>
       {invoice.status === "new" && (
@@ -475,7 +528,12 @@ function AnnouncementsTab() {
               </div>
               <button
                 className="btn"
-                style={{ fontSize: 12, padding: "4px 10px", color: "var(--danger)", borderColor: "var(--danger)" }}
+                style={{
+                  fontSize: 12,
+                  padding: "4px 10px",
+                  color: "var(--danger)",
+                  borderColor: "var(--danger)",
+                }}
                 onClick={() => handleDelete(a.id)}
                 disabled={busyId === a.id}
               >
@@ -541,7 +599,12 @@ function PricesTab({ uid }) {
           />
         </div>
       ))}
-      <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={saveAll} disabled={saving}>
+      <button
+        className="btn btn-primary"
+        style={{ marginTop: 14 }}
+        onClick={saveAll}
+        disabled={saving}
+      >
         {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
       </button>
     </div>
@@ -569,7 +632,9 @@ function EquipmentTab({ uid }) {
   async function saveAll() {
     setSaving(true);
     try {
-      await Promise.all(EQUIPMENT.map((eq) => setEquipmentPrice(eq.id, values[eq.id] || 0, uid)));
+      await Promise.all(
+        EQUIPMENT.map((eq) => setEquipmentPrice(eq.id, values[eq.id] || 0, uid))
+      );
     } finally {
       setSaving(false);
     }
@@ -589,7 +654,12 @@ function EquipmentTab({ uid }) {
           />
         </div>
       ))}
-      <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={saveAll} disabled={saving}>
+      <button
+        className="btn btn-primary"
+        style={{ marginTop: 14 }}
+        onClick={saveAll}
+        disabled={saving}
+      >
         {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
       </button>
     </div>
@@ -689,7 +759,14 @@ function VerificationTab() {
                 padding: 14,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 10,
+                }}
+              >
                 <div>
                   <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
                     {req.name || req.email}
@@ -744,15 +821,25 @@ function VerificationTab() {
                 )}
 
                 {req.status === "approved" && (
-                  <span className="badge" style={{ alignSelf: "flex-start" }}>✅ موثق</span>
+                  <span className="badge" style={{ alignSelf: "flex-start" }}>
+                    ✅ موثق
+                  </span>
                 )}
                 {req.status === "rejected" && (
-                  <span className="badge badge-danger" style={{ alignSelf: "flex-start" }}>❌ مرفوض</span>
+                  <span className="badge badge-danger" style={{ alignSelf: "flex-start" }}>
+                    ❌ مرفوض
+                  </span>
                 )}
               </div>
 
               {rejectingId === req.id && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
+                <div
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 12,
+                    borderTop: "1px dashed var(--line)",
+                  }}
+                >
                   <input
                     className="input"
                     placeholder="سبب الرفض (سيظهر للتاجر)"
@@ -814,12 +901,23 @@ function MessagesTab() {
       {messages.map((m) => (
         <div
           key={m.id}
-          style={{ background: "var(--paper-raised)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 14 }}
+          style={{
+            background: "var(--paper-raised)",
+            border: "1px solid var(--line)",
+            borderRadius: "var(--radius)",
+            padding: 14,
+          }}
           onClick={() => !m.read && markMessageRead(m.id)}
         >
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{m.name || "بدون اسم"}</p>
-            {!m.read && <span style={{ fontSize: 11, color: "var(--kabbash)", fontWeight: 700 }}>جديدة</span>}
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
+              {m.name || "بدون اسم"}
+            </p>
+            {!m.read && (
+              <span style={{ fontSize: 11, color: "var(--kabbash)", fontWeight: 700 }}>
+                جديدة
+              </span>
+            )}
           </div>
           <p style={{ margin: "0 0 6px", fontSize: 12, color: "var(--steel)" }}>{m.email}</p>
           <p style={{ margin: 0, fontSize: 13 }}>{m.text}</p>
