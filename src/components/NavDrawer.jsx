@@ -145,7 +145,8 @@ export default function NavDrawer() {
               </button>
 
               <div className={`drawer-sublist ${sectionsOpen ? "open" : ""}`}>
-                <DrawerLink onClick={() => go("/calculator")}>أداة الحساب والفاتورة</DrawerLink>
+                <DrawerLink onClick={() => go("/dock")}>الرصيف البحري</DrawerLink>
+<DrawerLink onClick={() => go("/yard")}>ساحة الجزيره</DrawerLink>
                 {(role === ROLES.ADMIN || isPrimaryAdmin) && (
                   <DrawerLink onClick={() => go("/admin")}>لوحة الإدمن</DrawerLink>
                 )}
