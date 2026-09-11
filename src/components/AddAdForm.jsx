@@ -1,17 +1,36 @@
 import { useState } from "react";
 import { TON_CATEGORIES, LOCATIONS } from "../lib/catalog";
-import { createAd } from "../lib/ads";
+import { createAd, updateAd } from "../lib/ads";
 import { useAuth } from "../context/AuthContext";
 
-export default function AddAdForm({ onClose, defaultLocation }) {
+export default function AddAdForm({ onClose, defaultLocation, ad }) {
   const { user } = useAuth();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [location, setLocation] = useState(defaultLocation || LOCATIONS.DOCK);
-  const [items, setItems] = useState([
-    { category: TON_CATEGORIES[0], qty: "1", unitPrice: "0" },
-  ]);
+  const isEdit = !!ad;
+
+  const [title, setTitle] = useState(ad?.title || "");
+  const [description, setDescription] = useState(ad?.description || "");
+  const [imageUrl, setImageUrl] = useState(ad?.imageUrl || "");
+  const [location, setLocation] = useState(
+    ad?.location || defaultLocation || LOCATIONS.DOCK
+  );
+  const [items, setItems] = useState(() => {
+    if (ad?.items && ad.items.length > 0) {
+      return ad.items.map((it) => ({
+        category: it.category,
+        qty: String(it.qty ?? "1"),
+        unitPrice: String(it.unitPrice ?? "0"),
+        reservedQty: Number(it.reservedQty || 0),
+      }));
+    }
+    return [
+      {
+        category: TON_CATEGORIES[0],
+        qty: "1",
+        unitPrice: "0",
+        reservedQty: 0,
+      },
+    ];
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [imageError, setImageError] = useState(false);
@@ -20,7 +39,10 @@ export default function AddAdForm({ onClose, defaultLocation }) {
     const used = items.map((i) => i.category);
     const next =
       TON_CATEGORIES.find((c) => !used.includes(c)) || TON_CATEGORIES[0];
-    setItems([...items, { category: next, qty: "1", unitPrice: "0" }]);
+    setItems([
+      ...items,
+      { category: next, qty: "1", unitPrice: "0", reservedQty: 0 },
+    ]);
   }
 
   function removeItem(idx) {
@@ -28,7 +50,9 @@ export default function AddAdForm({ onClose, defaultLocation }) {
   }
 
   function updateItem(idx, field, value) {
-    setItems(items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
+    setItems(
+      items.map((it, i) => (i === idx ? { ...it, [field]: value } : it))
+    );
   }
 
   const total = items.reduce(
@@ -50,6 +74,13 @@ export default function AddAdForm({ onClose, defaultLocation }) {
         return setError(`الكمية غير صحيحة في: ${it.category}`);
       if (Number(it.unitPrice) <= 0)
         return setError(`السعر غير صحيح في: ${it.category}`);
+
+      // في وضع التعديل: الكمية الجديدة مايقلّش عن المحجوز
+      if (isEdit && Number(it.qty) < Number(it.reservedQty || 0)) {
+        return setError(
+          `الكمية في "${it.category}" أقل من المحجوز (${it.reservedQty} طن). لازم تكون مساوية أو أكبر.`
+        );
+      }
     }
 
     const cats = items.map((i) => i.category);
@@ -58,24 +89,45 @@ export default function AddAdForm({ onClose, defaultLocation }) {
 
     setSaving(true);
     try {
-      await createAd(
-        {
-          title,
-          description,
-          imageUrl,
-          location,
-          items: items.map((it) => ({
-            category: it.category,
-            qty: Number(it.qty),
-            unitPrice: Number(it.unitPrice),
-          })),
-        },
-        user
-      );
+      const newItems = items.map((it) => ({
+        category: it.category,
+        qty: Number(it.qty),
+        unitPrice: Number(it.unitPrice),
+        reservedQty: Number(it.reservedQty || 0),
+      }));
+
+      if (isEdit) {
+        await updateAd(
+          ad.id,
+          {
+            title: title.trim(),
+            description: description.trim(),
+            imageUrl: imageUrl.trim(),
+            location,
+            items: newItems,
+          },
+          user.uid
+        );
+      } else {
+        await createAd(
+          {
+            title,
+            description,
+            imageUrl,
+            location,
+            items: newItems,
+          },
+          user
+        );
+      }
       onClose();
     } catch (err) {
-      console.error("تعذر إنشاء الإعلان:", err);
-      setError("تعذر إنشاء الإعلان، حاول تاني");
+      console.error("تعذر حفظ الإعلان:", err);
+      setError(
+        err?.message
+          ? `تعذر الحفظ: ${err.message}`
+          : "تعذر حفظ الإعلان، حاول تاني"
+      );
     } finally {
       setSaving(false);
     }
@@ -86,9 +138,13 @@ export default function AddAdForm({ onClose, defaultLocation }) {
       <div className="adf-modal" onClick={(e) => e.stopPropagation()}>
         <div className="adf-header">
           <div>
-            <h2 className="adf-title">إضافة إعلان جديد</h2>
+            <h2 className="adf-title">
+              {isEdit ? "تعديل الإعلان" : "إضافة إعلان جديد"}
+            </h2>
             <p className="adf-subtitle">
-              املأ بيانات الإعلان. الأصناف هتكون قابلة للحجز من التجار الموثقين.
+              {isEdit
+                ? "عدّل البيانات واضغط حفظ. الأصناف المحجوزة مش هتقل."
+                : "املأ بيانات الإعلان. الأصناف هتكون قابلة للحجز من التجار الموثقين."}
             </p>
           </div>
           <button
@@ -211,72 +267,85 @@ export default function AddAdForm({ onClose, defaultLocation }) {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {items.map((it, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 80px 90px 32px",
-                    gap: 6,
-                    alignItems: "center",
-                  }}
-                >
-                  <select
-                    className="input"
-                    value={it.category}
-                    onChange={(e) =>
-                      updateItem(idx, "category", e.target.value)
-                    }
-                    style={{ fontSize: 13 }}
+                <div key={idx}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 80px 90px 32px",
+                      gap: 6,
+                      alignItems: "center",
+                    }}
                   >
-                    {TON_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={it.qty}
-                    onChange={(e) => updateItem(idx, "qty", e.target.value)}
-                    placeholder="طن"
-                    style={{ textAlign: "center", fontSize: 13 }}
-                  />
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={it.unitPrice}
-                    onChange={(e) =>
-                      updateItem(idx, "unitPrice", e.target.value)
-                    }
-                    placeholder="ج/طن"
-                    style={{ textAlign: "center", fontSize: 13 }}
-                  />
-                  {items.length > 1 ? (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(idx)}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 8,
-                        border: "1.5px solid var(--line-strong)",
-                        background: "transparent",
-                        color: "var(--danger)",
-                        cursor: "pointer",
-                        fontSize: 12,
-                        fontWeight: 700,
-                      }}
-                      aria-label="حذف الصنف"
+                    <select
+                      className="input"
+                      value={it.category}
+                      onChange={(e) =>
+                        updateItem(idx, "category", e.target.value)
+                      }
+                      style={{ fontSize: 13 }}
                     >
-                      ✕
-                    </button>
-                  ) : (
-                    <span />
+                      {TON_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={it.qty}
+                      onChange={(e) => updateItem(idx, "qty", e.target.value)}
+                      placeholder="طن"
+                      style={{ textAlign: "center", fontSize: 13 }}
+                    />
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={it.unitPrice}
+                      onChange={(e) =>
+                        updateItem(idx, "unitPrice", e.target.value)
+                      }
+                      placeholder="ج/طن"
+                      style={{ textAlign: "center", fontSize: 13 }}
+                    />
+                    {items.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(idx)}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          border: "1.5px solid var(--line-strong)",
+                          background: "transparent",
+                          color: "var(--danger)",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          fontWeight: 700,
+                        }}
+                        aria-label="حذف الصنف"
+                      >
+                        ✕
+                      </button>
+                    ) : (
+                      <span />
+                    )}
+                  </div>
+                  {isEdit && Number(it.reservedQty || 0) > 0 && (
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: "var(--crane)",
+                        margin: "4px 0 0 4px",
+                      }}
+                    >
+                      ⚠️ محجوز حالياً: {it.reservedQty} طن — الكمية الجديدة
+                      لازم تكون ≥ {it.reservedQty}
+                    </p>
                   )}
                 </div>
               ))}
@@ -348,7 +417,11 @@ export default function AddAdForm({ onClose, defaultLocation }) {
               className="btn btn-primary"
               disabled={saving}
             >
-              {saving ? "جاري النشر..." : "نشر الإعلان"}
+              {saving
+                ? "جاري الحفظ..."
+                : isEdit
+                ? "حفظ التعديلات"
+                : "نشر الإعلان"}
             </button>
           </div>
         </form>
