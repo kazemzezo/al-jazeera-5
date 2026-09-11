@@ -17,6 +17,10 @@ import { TON_CATEGORIES } from "./catalog";
 import { EQUIPMENT } from "./equipment";
 import { revertAdReservation } from "./ads";
 
+/* ===================== ثوابت ===================== */
+// عدد الأيام اللي بعدها السعر يعتبر "ثابت"
+export const PRICE_STABLE_DAYS = 5;
+
 /* ===================== الأسعار ===================== */
 export function subscribeTonPrices(callback) {
   return onSnapshot(collection(db, "prices"), (snap) => {
@@ -26,13 +30,71 @@ export function subscribeTonPrices(callback) {
   });
 }
 
+// ✅ محدّث: يقارن بالسعر القديم ويحدد الاتجاه
 export async function setTonPrice(category, pricePerTon, uid) {
-  await setDoc(doc(db, "prices", category), {
+  const newPrice = Number(pricePerTon);
+  const priceRef = doc(db, "prices", category);
+
+  // اقرأ السعر الحالي
+  const snap = await getDoc(priceRef);
+  const oldData = snap.exists() ? snap.data() : null;
+  const oldPrice = Number(oldData?.pricePerTon ?? 0);
+
+  // احسب الاتجاه
+  let direction = oldData?.direction || "stable";
+  let changedAt = oldData?.changedAt || serverTimestamp();
+
+  if (oldData) {
+    if (newPrice > oldPrice) {
+      direction = "up";
+      changedAt = serverTimestamp();
+    } else if (newPrice < oldPrice) {
+      direction = "down";
+      changedAt = serverTimestamp();
+    }
+    // لو نفس السعر: نسيب direction و changedAt زي ما هما
+  } else {
+    // أول مرة يتسجل السعر
+    direction = "stable";
+    changedAt = serverTimestamp();
+  }
+
+  await setDoc(priceRef, {
     name: category,
-    pricePerTon: Number(pricePerTon),
+    pricePerTon: newPrice,
+    previousPrice: oldPrice,
+    direction,
+    changedAt,
     updatedAt: serverTimestamp(),
     updatedBy: uid,
   });
+}
+
+// ✅ helper: هل السعر ثابت لـ X أيام؟
+export function isPriceStableFor(priceData, days = PRICE_STABLE_DAYS) {
+  if (!priceData?.changedAt) return true;
+  const changedMs = priceData.changedAt?.toMillis?.();
+  if (!changedMs) return false;
+  const diffDays = (Date.now() - changedMs) / (1000 * 60 * 60 * 24);
+  return diffDays >= days;
+}
+
+// ✅ helper: اتجاه السعر النهائي للعرض
+// لو ثابت لـ 5 أيام → "stable"
+// غير كده → "up" أو "down" زي ما هو محفوظ
+export function getPriceDirection(priceData) {
+  if (!priceData) return "stable";
+  if (isPriceStableFor(priceData)) return "stable";
+  return priceData.direction || "stable";
+}
+
+// ✅ helper: نسبة التغيير
+export function getPriceChangePercent(priceData) {
+  if (!priceData?.previousPrice || !priceData?.pricePerTon) return 0;
+  const oldP = Number(priceData.previousPrice);
+  const newP = Number(priceData.pricePerTon);
+  if (oldP === 0) return 0;
+  return ((newP - oldP) / oldP) * 100;
 }
 
 export function ensureTonCategoriesSeed() {
@@ -262,7 +324,6 @@ export function subscribeMyReservations(uid, callback) {
   );
 }
 
-// ✅ محدّث: يتعامل مع حجوزات الإعلان والحجوزات العادية
 export async function updateReservationStatus(id, newStatus, options = {}) {
   const { reason = "", uid = null } = options;
   const reservationRef = doc(db, "reservations", id);
@@ -271,7 +332,6 @@ export async function updateReservationStatus(id, newStatus, options = {}) {
   if (!snap.exists()) throw new Error("الحجز غير موجود");
   const data = snap.data();
 
-  // 1. حدّث حالة الحجز الأول
   const updatePayload = {
     status: newStatus,
     statusUpdatedAt: serverTimestamp(),
@@ -282,18 +342,14 @@ export async function updateReservationStatus(id, newStatus, options = {}) {
   }
   await updateDoc(reservationRef, updatePayload);
 
-  // 2. لو إلغاء → رجّع الكميات
   if (newStatus === "cancelled") {
-    // حجز إعلان جديد
     if (data.type === "ad" && data.adId && data.items) {
       try {
         await revertAdReservation(data.adId, data.items);
       } catch (err) {
         console.error("فشل إرجاع الكمية للإعلان:", err);
       }
-    }
-    // حجز صنف قديم
-    else if (data.type === "listing" && data.listingId) {
+    } else if (data.type === "listing" && data.listingId) {
       try {
         const listingRef = doc(db, "listings", data.listingId);
         const listingSnap = await getDoc(listingRef);
