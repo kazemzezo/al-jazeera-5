@@ -10,11 +10,10 @@ const TOTAL_WORKERS_AVAILABLE = 20;
 export default function AdReserveModal({ ad, onClose, onSuccess }) {
   const { user, profile } = useAuth();
 
-  // الأصناف: كل صنف له كمية قابلة للتعديل
   const [itemQtys, setItemQtys] = useState(() => {
     const init = {};
     (ad.items || []).forEach((it) => {
-      init[it.category] = 0; // يبدأ من صفر
+      init[it.category] = 0;
     });
     return init;
   });
@@ -25,8 +24,6 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-
-  // ============ الحسابات ============
 
   const itemsWithTotals = useMemo(() => {
     return (ad.items || []).map((it) => {
@@ -65,8 +62,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
   const workersTotal = Number(workerCount || 0) * WORKER_PRICE;
   const carsTotal = Number(carCount || 0) * CAR_PRICE;
 
-  const grandTotal =
-    itemsTotal + equipmentTotal + workersTotal + carsTotal;
+  const grandTotal = itemsTotal + equipmentTotal + workersTotal + carsTotal;
 
   const hasAnyItem = itemsWithTotals.some((it) => it.qty > 0);
   const hasAnyEquipment = equipmentWithTotals.some((eq) => eq.hours > 0);
@@ -76,12 +72,10 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
   const canSubmit =
     hasAnyItem || hasAnyEquipment || hasWorkers || hasCars;
 
-  // ============ Handlers ============
-
   function setItemQty(category, value, max) {
     const num = Number(value || 0);
     if (num < 0) return;
-    if (num > max) return; // الحد الأقصى = المتاح
+    if (num > max) return;
     setItemQtys({ ...itemQtys, [category]: num });
   }
 
@@ -94,7 +88,6 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
       return;
     }
 
-    // تحقق من أن الكميات لا تتجاوز المتاح
     for (const it of itemsWithTotals) {
       if (it.qty > it.available) {
         setError(`الكمية المطلوبة من ${it.category} تتجاوز المتاح`);
@@ -133,13 +126,15 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error("فشل إنشاء الحجز:", err);
-      setError("تعذر إنشاء الحجز، حاول تاني");
+      setError(
+        err?.message
+          ? `تعذر إنشاء الحجز: ${err.message}`
+          : "تعذر إنشاء الحجز، حاول تاني"
+      );
     } finally {
       setSaving(false);
     }
   }
-
-  // ============ Render ============
 
   if (done) {
     return (
@@ -183,7 +178,6 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* الأصناف */}
           <Section title="الأصناف">
             {itemsWithTotals.map((it) => (
               <div key={it.category} className="arm-row">
@@ -200,7 +194,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
                     className="input arm-input"
                     min="0"
                     max={it.available}
-                    step="0.01"
+                    step="1"
                     value={it.qty || ""}
                     onChange={(e) =>
                       setItemQty(it.category, e.target.value, it.available)
@@ -218,7 +212,6 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             ))}
           </Section>
 
-          {/* المعدات */}
           <Section title="المعدات (اختياري)">
             {equipmentWithTotals.map((eq) => (
               <div key={eq.id} className="arm-row">
@@ -233,6 +226,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
                     type="number"
                     className="input arm-input"
                     min="0"
+                    step="1"
                     value={eq.hours || ""}
                     onChange={(e) =>
                       setEquipmentHours({
@@ -253,7 +247,6 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             ))}
           </Section>
 
-          {/* العمال */}
           <Section title="العمال (اختياري)">
             <div className="arm-row">
               <div className="arm-row-info">
@@ -268,6 +261,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
                   className="input arm-input"
                   min="0"
                   max={TOTAL_WORKERS_AVAILABLE}
+                  step="1"
                   value={workerCount || ""}
                   onChange={(e) => setWorkerCount(e.target.value)}
                   placeholder="0"
@@ -282,7 +276,6 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             </div>
           </Section>
 
-          {/* السيارات */}
           <Section title="السيارات (اختياري)">
             <div className="arm-row">
               <div className="arm-row-info">
@@ -294,6 +287,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
                   type="number"
                   className="input arm-input"
                   min="0"
+                  step="1"
                   value={carCount || ""}
                   onChange={(e) => setCarCount(e.target.value)}
                   placeholder="0"
@@ -306,20 +300,15 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             </div>
           </Section>
 
-          {/* الإجماليات */}
           <div className="arm-summary">
-            {itemsTotal > 0 && (
-              <SummaryRow label="الأصناف" value={itemsTotal} />
-            )}
+            {itemsTotal > 0 && <SummaryRow label="الأصناف" value={itemsTotal} />}
             {equipmentTotal > 0 && (
               <SummaryRow label="المعدات" value={equipmentTotal} />
             )}
             {workersTotal > 0 && (
               <SummaryRow label="العمال" value={workersTotal} />
             )}
-            {carsTotal > 0 && (
-              <SummaryRow label="السيارات" value={carsTotal} />
-            )}
+            {carsTotal > 0 && <SummaryRow label="السيارات" value={carsTotal} />}
             <div className="arm-grand-total">
               <span>الإجمالي</span>
               <span>{grandTotal.toLocaleString("ar-EG")}ج</span>
@@ -441,7 +430,6 @@ const styles = `
   .arm-close:hover {
     background: var(--paper-sunken);
   }
-
   .arm-section {
     margin-bottom: 16px;
     padding: 12px;
@@ -461,7 +449,6 @@ const styles = `
     flex-direction: column;
     gap: 6px;
   }
-
   .arm-row {
     display: grid;
     grid-template-columns: 1fr auto 80px;
@@ -510,7 +497,6 @@ const styles = `
     color: var(--ink);
     white-space: nowrap;
   }
-
   .arm-summary {
     margin-top: 8px;
     padding-top: 12px;
@@ -538,7 +524,6 @@ const styles = `
     font-size: 20px;
     font-weight: 900;
   }
-
   .arm-error {
     margin: 12px 0 0;
     padding: 8px 12px;
@@ -548,7 +533,6 @@ const styles = `
     border-radius: 8px;
     line-height: 1.5;
   }
-
   .arm-actions {
     display: flex;
     gap: 8px;
@@ -557,7 +541,6 @@ const styles = `
   .arm-actions .btn {
     flex: 1;
   }
-
   .arm-note {
     font-size: 11.5px;
     color: var(--steel-light);
@@ -565,7 +548,6 @@ const styles = `
     text-align: center;
     line-height: 1.6;
   }
-
   .arm-success {
     text-align: center;
     padding: 10px 0;
@@ -585,7 +567,6 @@ const styles = `
     color: var(--steel);
     line-height: 1.7;
   }
-
   @media (max-width: 480px) {
     .arm-modal {
       padding: 16px;
