@@ -49,8 +49,13 @@ export default function Home() {
   }, [notice]);
 
   async function handleRequest() {
-    await requestVerification(user, profile);
-    setSent(true);
+    try {
+      await requestVerification(user, profile);
+      setSent(true);
+    } catch (err) {
+      console.error("تعذر إرسال طلب التوثيق:", err);
+      setNotice("تعذر إرسال طلب التوثيق، حاول مرة أخرى.");
+    }
   }
 
   async function handleReserve(listing, qty) {
@@ -87,7 +92,20 @@ export default function Home() {
       )}
 
       {isUnverifiedTrader && (
-        <div style={{ background: "var(--crane-light)", border: "1px solid var(--crane)", borderRadius: "var(--radius)", padding: "14px 16px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            background: "var(--crane-light)",
+            border: "1px solid var(--crane)",
+            borderRadius: "var(--radius)",
+            padding: "14px 16px",
+            marginBottom: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <span style={{ fontSize: 14 }}>
             حسابك غير موثق حاليًا، يمكنك استخدام أدوات الحساب للاطلاع فقط. للحجز
             والشراء، تواصل مع إدارة الموقع للتوثيق.
