@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -9,12 +10,14 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { TON_CATEGORIES } from "./catalog";
 import { EQUIPMENT } from "./equipment";
 
+/* ===================== الأسعار ===================== */
 export function subscribeTonPrices(callback) {
   return onSnapshot(collection(db, "prices"), (snap) => {
     const prices = {};
@@ -36,6 +39,7 @@ export function ensureTonCategoriesSeed() {
   return TON_CATEGORIES;
 }
 
+/* ===================== أسعار المعدات ===================== */
 export function subscribeEquipmentPrices(callback) {
   return onSnapshot(collection(db, "equipment_prices"), (snap) => {
     const prices = {};
@@ -54,15 +58,27 @@ export async function setEquipmentPrice(id, pricePerHour, uid) {
   });
 }
 
+/* ===================== الإعلانات ===================== */
+// FIX: بدون where+orderBy (كان محتاج composite index ويفشل بصمت)
 export function subscribeAnnouncements(location, callback) {
-  const q = query(
+  return onSnapshot(
     collection(db, "announcements"),
-    where("location", "==", location),
-    orderBy("createdAt", "desc")
+    (snap) => {
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const filtered = all
+        .filter((a) => a.location === location)
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() || 0;
+          const tb = b.createdAt?.toMillis?.() || 0;
+          return tb - ta;
+        });
+      callback(filtered);
+    },
+    (err) => {
+      console.error("فشل تحميل الإعلانات:", err);
+      callback([]);
+    }
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
 }
 
 export async function postAnnouncement(location, text, user) {
@@ -75,6 +91,11 @@ export async function postAnnouncement(location, text, user) {
   });
 }
 
+export async function deleteAnnouncement(id) {
+  await deleteDoc(doc(db, "announcements", id));
+}
+
+/* ===================== الأصناف ===================== */
 export function subscribeListings(location, callback) {
   const q = query(
     collection(db, "listings"),
@@ -102,7 +123,10 @@ export async function deactivateListing(id) {
   await setDoc(doc(db, "listings", id), { active: false }, { merge: true });
 }
 
-export async function reserveListingQuantity(listingId, qty, user) {
+/* ===================== الحجوزات (Reservations) ===================== */
+
+// حجز كمية من صنف مع حفظ السعر
+export async function reserveListingQuantity(listingId, qty, user, extra = {}) {
   const listingRef = doc(db, "listings", listingId);
   const result = await runTransaction(db, async (tx) => {
     const snap = await tx.get(listingRef);
@@ -121,20 +145,30 @@ export async function reserveListingQuantity(listingId, qty, user) {
   });
 
   if (result.ok) {
+    const d = result.data;
+    const unitPrice = Number(extra.unitPrice || 0);
+    const subtotal = unitPrice * qty;
     await addDoc(collection(db, "reservations"), {
+      type: "listing",
       listingId,
-      category: result.data.category,
-      saleType: result.data.saleType,
-      location: result.data.location,
+      category: d.category,
+      saleType: d.saleType,
+      location: d.location,
       qty,
+      unitPrice,
+      subtotal,
+      grandTotal: subtotal,
       uid: user.uid,
       traderName: user.displayName || user.email,
+      traderEmail: user.email || "",
+      status: "new",
       createdAt: serverTimestamp(),
     });
   }
   return result;
 }
 
+// حجز لوط كامل
 export async function reserveLot(listingId, user) {
   const listingRef = doc(db, "listings", listingId);
   const result = await runTransaction(db, async (tx) => {
@@ -147,16 +181,86 @@ export async function reserveLot(listingId, user) {
   });
 
   if (result.ok) {
+    const d = result.data;
+    const lotPrice = Number(d.lotPrice || 0);
     await addDoc(collection(db, "reservations"), {
+      type: "listing",
       listingId,
-      category: result.data.category,
-      saleType: result.data.saleType,
-      location: result.data.location,
-      lotPrice: result.data.lotPrice,
+      category: d.category,
+      saleType: d.saleType,
+      location: d.location,
+      qty: 1,
+      unitPrice: lotPrice,
+      subtotal: lotPrice,
+      grandTotal: lotPrice,
       uid: user.uid,
       traderName: user.displayName || user.email,
+      traderEmail: user.email || "",
+      status: "new",
       createdAt: serverTimestamp(),
     });
   }
   return result;
+}
+
+// حفظ فاتورة الحاسبة كاملة
+export async function createCalculatorInvoice(invoice, user) {
+  const ref = await addDoc(collection(db, "reservations"), {
+    type: "calculator",
+    ...invoice,
+    uid: user.uid,
+    traderName: invoice.traderName || user.displayName || user.email,
+    traderEmail: user.email || "",
+    status: "new",
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+// كل الحجوزات (نفلتر في الواجهة — أسرع وأخف من composite index)
+export function subscribeAllReservations(callback, onError) {
+  const q = query(
+    collection(db, "reservations"),
+    orderBy("createdAt", "desc")
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    },
+    onError
+  );
+}
+
+// تحديث حالة الحجز (لو إلغاء → نرجّع الكمية للمخزون)
+export async function updateReservationStatus(id, newStatus, options = {}) {
+  const { reason = "", uid = null } = options;
+  const reservationRef = doc(db, "reservations", id);
+  const snap = await getDoc(reservationRef);
+  if (!snap.exists()) throw new Error("الحجز غير موجود");
+  const data = snap.data();
+
+  // لو إلغاء ومرتبط بصنف، نرجّع الكمية
+  if (newStatus === "cancelled" && data.type === "listing" && data.listingId) {
+    const listingRef = doc(db, "listings", data.listingId);
+    const listingSnap = await getDoc(listingRef);
+    if (listingSnap.exists()) {
+      const ld = listingSnap.data();
+      const qty = Number(data.qty || 0);
+      if (data.saleType === "lot") {
+        await setDoc(listingRef, { reservedQty: 0, active: true }, { merge: true });
+      } else {
+        const currentReserved = Number(ld.reservedQty || 0);
+        const newReserved = Math.max(0, currentReserved - qty);
+        await setDoc(listingRef, { reservedQty: newReserved }, { merge: true });
+      }
+    }
+  }
+
+  await updateDoc(reservationRef, {
+    status: newStatus,
+    statusUpdatedAt: serverTimestamp(),
+    statusUpdatedBy: uid,
+    ...(newStatus === "cancelled" ? { cancelReason: reason } : {}),
+  });
 }
