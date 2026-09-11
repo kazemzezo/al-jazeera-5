@@ -5,7 +5,12 @@ import { canReserve as canReserveRole } from "../lib/roles";
 import { TON_CATEGORIES, LOCATIONS, SITE_MAINTENANCE_FEE } from "../lib/catalog";
 import { EQUIPMENT, TOTAL_WORKERS } from "../lib/equipment";
 import { DEMO_TON_PRICES } from "../lib/demoData";
-import { subscribeTonPrices, subscribeEquipmentPrices } from "../lib/listings";
+import {
+  subscribeTonPrices,
+  subscribeEquipmentPrices,
+  createCalculatorInvoice,
+} from "../lib/listings";
+import InvoiceView from "../components/InvoiceView";
 
 const LOADING_PRICE_PER_TON = 30;
 
@@ -24,11 +29,12 @@ export default function Calculator() {
   const [loadingTons, setLoadingTons] = useState(1);
   const [carCount, setCarCount] = useState(1);
   const [confirmedInvoice, setConfirmedInvoice] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const [liveTonPrices, setLiveTonPrices] = useState({});
   const [liveEquipmentPrices, setLiveEquipmentPrices] = useState({});
 
-  // ✅ مسح الفاتورة لما المستخدم يسجل خروج
   useEffect(() => {
     if (!user) setConfirmedInvoice(null);
   }, [user]);
@@ -90,7 +96,8 @@ export default function Calculator() {
   const grandTotal = scrapTotal + equipmentTotal + loadingTotal + maintenanceTotal;
   const canConfirm = canReserveRole(role);
 
-  function handleConfirm() {
+  async function handleConfirm() {
+    setError("");
     if (!user) {
       promptLogin("لازم تسجل دخولك الأول عشان تقدر تأكد الحجز");
       return;
@@ -99,34 +106,55 @@ export default function Calculator() {
       promptVerification("لإتمام الحجز، لازم توثق حسابك أولاً.");
       return;
     }
-    setConfirmedInvoice({
-      invoiceId: "AJ5-" + Date.now().toString().slice(-8),
-      date: new Date().toLocaleDateString("ar-EG"),
-      traderName: profile?.name || user.email,
-      location,
-      scrapRows: scrapRows.filter((r) => r.tons > 0),
-      equipmentRows,
-      workerCount,
-      loadingTons: Number(loadingTons || 0),
-      loadingPricePerTon: LOADING_PRICE_PER_TON,
-      loadingTotal,
-      carCount,
-      maintenanceFee,
-      maintenanceTotal,
-      scrapTotal,
-      equipmentTotal,
-      grandTotal,
-    });
+
+    setSaving(true);
+    try {
+      const invoiceId = "AJ5-" + Date.now().toString().slice(-8);
+      const invoice = {
+        invoiceId,
+        date: new Date().toLocaleDateString("ar-EG"),
+        traderName: profile?.name || user.email,
+        location,
+        scrapRows: scrapRows.filter((r) => r.tons > 0),
+        equipmentRows,
+        workerCount: Number(workerCount || 0),
+        loadingTons: Number(loadingTons || 0),
+        loadingPricePerTon: LOADING_PRICE_PER_TON,
+        loadingTotal,
+        carCount: Number(carCount || 0),
+        maintenanceFee,
+        maintenanceTotal,
+        scrapTotal,
+        equipmentTotal,
+        grandTotal,
+      };
+      await createCalculatorInvoice(invoice, user);
+      setConfirmedInvoice({ ...invoice, type: "calculator" });
+    } catch (err) {
+      console.error(err);
+      setError("تعذر حفظ الحجز، حاول مرة أخرى.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (confirmedInvoice) {
-    return <InvoiceView invoice={confirmedInvoice} onBack={() => setConfirmedInvoice(null)} />;
+    return (
+      <InvoiceView
+        invoice={confirmedInvoice}
+        onBack={() => setConfirmedInvoice(null)}
+      />
+    );
   }
 
   return (
     <div className="calc-page">
       <h1 className="calc-title">أداة الحساب</h1>
       <p className="calc-subtitle">الأسعار تُحدّث تلقائيًا حسب ما يضعه الأدمن.</p>
+
+      {error && (
+        <p style={{ fontSize: 13, color: "var(--danger)", marginBottom: 12 }}>{error}</p>
+      )}
 
       <div className="calc-location-tabs">
         {[LOCATIONS.DOCK, LOCATIONS.YARD].map((loc) => (
@@ -276,8 +304,9 @@ export default function Calculator() {
             className="btn btn-primary"
             style={{ width: "100%", marginTop: 14 }}
             onClick={handleConfirm}
+            disabled={saving}
           >
-            {user ? "تأكيد الحجز وعرض الفاتورة" : "سجّل دخولك لتأكيد الحجز"}
+            {saving ? "جاري الحفظ..." : user ? "تأكيد الحجز وعرض الفاتورة" : "سجّل دخولك لتأكيد الحجز"}
           </button>
         )}
       </Section>
@@ -381,108 +410,6 @@ export default function Calculator() {
           .calc-input { padding: 6px 8px; font-size: 12px; }
         }
       `}</style>
-    </div>
-  );
-}
-
-function InvoiceView({ invoice, onBack }) {
-  return (
-    <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, gap: 8 }}>
-        <button className="btn" onClick={onBack}>عودة للأداة</button>
-        <button className="btn btn-primary" onClick={() => window.print()}>طباعة / حفظ PDF</button>
-      </div>
-
-      <div id="invoice-print" style={{ background: "var(--paper-raised)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 24 }}>
-        <div style={{ textAlign: "center", marginBottom: 20, borderBottom: "2px solid var(--ink)", paddingBottom: 16 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 900, margin: "0 0 4px" }}>فاتورة الجزيره خمسه</h1>
-          <p style={{ fontSize: 12, color: "var(--steel)", margin: 0 }}>
-            رقم الفاتورة: {invoice.invoiceId} · التاريخ: {invoice.date}
-          </p>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, fontSize: 13, flexWrap: "wrap", gap: 8 }}>
-          <span><b>اسم التاجر:</b> {invoice.traderName}</span>
-          <span><b>الموقع:</b> {invoice.location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}</span>
-        </div>
-
-        {invoice.scrapRows.length > 0 && (
-          <InvoiceGroup title="أسعار الأصناف">
-            {invoice.scrapRows.map((r, i) => (
-              <InvoiceLine key={i} label={`${r.category} - ${r.tons} طن`} value={r.total} />
-            ))}
-          </InvoiceGroup>
-        )}
-
-        {(invoice.equipmentRows.length > 0 || invoice.loadingTotal > 0) && (
-          <InvoiceGroup title="الرسوم الإيجارية للمعدات والعمالة">
-            {invoice.equipmentRows.map((r, i) => (
-              <InvoiceLine key={i} label={`${r.name} - ${r.hours} ساعة`} value={r.total} />
-            ))}
-            {invoice.loadingTotal > 0 && (
-              <InvoiceLine
-                label={`تحميل ${invoice.loadingTons} طن × ${fmt(invoice.loadingPricePerTon)}${invoice.workerCount > 0 ? ` (${invoice.workerCount} عامل)` : ""}`}
-                value={invoice.loadingTotal}
-              />
-            )}
-          </InvoiceGroup>
-        )}
-
-        <InvoiceGroup title="رسوم الرصيف">
-          <InvoiceLine label={`صيانة الرصيف (${invoice.carCount} سيارة × ${fmt(invoice.maintenanceFee)})`} value={invoice.maintenanceTotal} />
-        </InvoiceGroup>
-
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, paddingTop: 16, borderTop: "2px solid var(--ink)" }}>
-          <span style={{ fontSize: 16, fontWeight: 700 }}>الإجمالي الكلي</span>
-          <span style={{ fontSize: 24, fontWeight: 900 }}>{fmt(invoice.grandTotal)}</span>
-        </div>
-      </div>
-
-      <style>{`
-        @media print {
-          /* اخفي كل حاجة في الصفحة */
-          body * { visibility: hidden !important; }
-          /* اظهر الفاتورة بس */
-          #invoice-print, #invoice-print * { visibility: visible !important; }
-          /* خلي الفاتورة تشغل الصفحة كاملة من أولها */
-          #invoice-print {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            right: 0 !important;
-            width: 100% !important;
-            border: none !important;
-            border-radius: 0 !important;
-            padding: 16px !important;
-            margin: 0 !important;
-            background: #fff !important;
-            color: #000 !important;
-          }
-          /* امنع فصل الفاتورة على أكتر من صفحة */
-          #invoice-print { page-break-inside: avoid; }
-          @page { margin: 12mm; }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-function InvoiceGroup({ title, children }) {
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--steel)", borderBottom: "1px solid var(--line)", paddingBottom: 6, marginBottom: 8 }}>
-        {title}
-      </p>
-      {children}
-    </div>
-  );
-}
-
-function InvoiceLine({ label, value }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}>
-      <span>{label}</span>
-      <span style={{ fontWeight: 700 }}>{fmt(value)}</span>
     </div>
   );
 }
