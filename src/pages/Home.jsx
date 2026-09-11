@@ -1,246 +1,171 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext";
-import { useGuestPrompt } from "../context/GuestPromptContext";
-import { ROLES, canReserve as canReserveRole } from "../lib/roles";
-import { LOCATIONS, SALE_TYPES } from "../lib/catalog";
-import {
-  requestVerification,
-  subscribeMyLatestVerification,
-} from "../lib/verification";
-import {
-  subscribeListings,
-  subscribeTonPrices,
-  reserveListingQuantity,
-  reserveLot,
-} from "../lib/listings";
-import { DEMO_LISTINGS, DEMO_TON_PRICES } from "../lib/demoData";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { LOCATIONS } from "../lib/catalog";
+import { subscribeActiveAds, AD_STATUS } from "../lib/ads";
 import PriceBar from "../components/PriceBar";
 import AnnouncementBanner from "../components/AnnouncementBanner";
-import ListingCard from "../components/ListingCard";
-import AddListingForm from "../components/AddListingForm";
+import AdCard from "../components/AdCard";
 
 export default function Home() {
-  const { user, profile, role } = useAuth();
-  const { promptLogin, promptVerification } = useGuestPrompt();
-  const [location, setLocation] = useState(LOCATIONS.DOCK);
-  const [listings, setListings] = useState([]);
-  const [tonPrices, setTonPrices] = useState({});
-  const [notice, setNotice] = useState("");
-  const [noticeType, setNoticeType] = useState("success");
-  const [myVerif, setMyVerif] = useState(null);
-  const [sending, setSending] = useState(false);
-
-  const isUnverifiedTrader = role === ROLES.TRADER;
-  const canManage =
-    role === ROLES.ADMIN ||
-    (role === ROLES.SUPERVISOR && location === LOCATIONS.DOCK);
-
-  const showDemo = listings.length === 0;
-  const displayListings = showDemo
-    ? DEMO_LISTINGS.filter((l) => l.location === location)
-    : listings;
-  const displayTonPrices =
-    Object.keys(tonPrices).length > 0 ? tonPrices : DEMO_TON_PRICES;
+  const [location, setLocation] = useState("all");
+  const [allAds, setAllAds] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = subscribeListings(location, setListings);
-    return () => unsub();
-  }, [location]);
-
-  useEffect(() => {
-    const unsub = subscribeTonPrices(setTonPrices);
+    const unsub = subscribeActiveAds(
+      (items) => {
+        setAllAds(items);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("فشل تحميل الإعلانات:", err);
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, []);
 
-  // راقب حالة التوثيق للتاجر
-  useEffect(() => {
-    if (!user) {
-      setMyVerif(null);
-      return;
-    }
-    const unsub = subscribeMyLatestVerification(user.uid, setMyVerif);
-    return () => unsub();
-  }, [user]);
+  const displayed = useMemo(() => {
+    if (location === "all") return allAds;
+    return allAds.filter((a) => a.location === location);
+  }, [allAds, location]);
 
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(""), 4000);
-    return () => clearTimeout(t);
-  }, [notice]);
-
-  function showNotice(text, type = "success") {
-    setNotice(text);
-    setNoticeType(type);
-  }
-
-  async function handleRequest() {
-    if (sending) return;
-    setSending(true);
-    try {
-      await requestVerification(user, profile);
-      showNotice("تم إرسال طلب التوثيق بنجاح. سيتم مراجعته قريبًا.", "success");
-    } catch (err) {
-      console.error(err);
-      showNotice(err.message || "تعذر إرسال الطلب، حاول مرة أخرى.", "error");
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function handleReserve(listing, qty) {
-    if (!user) {
-      promptLogin("لازم تسجل دخولك الأول عشان تقدر تحجز");
-      return;
-    }
-    if (!canReserveRole(role)) {
-      promptVerification("لإتمام الحجز، لازم توثق حسابك أولاً.");
-      return;
-    }
-
-    if (listing.saleType === SALE_TYPES.LOT) {
-      const res = await reserveLot(listing.id, user);
-      if (!res.ok) showNotice("تم حجز هذا اللوط بالفعل من تاجر آخر.", "error");
-      else showNotice("تم تأكيد الحجز بنجاح.");
-      return;
-    }
-
-    const res = await reserveListingQuantity(listing.id, Number(qty || 1), user);
-    if (!res.ok) {
-      showNotice(
-        `الكمية المطلوبة أكبر من المتاح. المتاح حاليًا: ${res.available}.`,
-        "error"
-      );
-    } else {
-      showNotice("تم تأكيد الحجز بنجاح.");
-    }
-  }
-
-  const noticeBg =
-    noticeType === "error" ? "var(--danger-light)" : "var(--kabbash-light)";
-  const noticeBorder =
-    noticeType === "error" ? "var(--danger)" : "var(--kabbash)";
-  const noticeColor =
-    noticeType === "error" ? "var(--danger)" : "var(--ink)";
-
-  // نص بانر التوثيق حسب الحالة
-  let verifText = "";
-  let verifBtnLabel = null;
-  if (isUnverifiedTrader) {
-    if (myVerif?.status === "pending") {
-      verifText = "طلب التوثيق تحت المراجعة ⏳ — سيتم إشعارك عند الرد.";
-    } else if (myVerif?.status === "rejected") {
-      verifText = `تم رفض طلب التوثيق${myVerif.rejectReason ? ": " + myVerif.rejectReason : ""}`;
-      verifBtnLabel = "إعادة إرسال الطلب";
-    } else {
-      verifText =
-        "حسابك غير موثق حاليًا. يمكنك استخدام أدوات الحساب للاطلاع فقط. للحجز، أرسل طلب توثيق.";
-      verifBtnLabel = "طلب التوثيق الآن";
-    }
-  }
+  const dockCount = allAds.filter((a) => a.location === LOCATIONS.DOCK).length;
+  const yardCount = allAds.filter((a) => a.location === LOCATIONS.YARD).length;
 
   return (
     <div>
-      {notice && (
-        <div
-          style={{
-            background: noticeBg,
-            border: `1px solid ${noticeBorder}`,
-            color: noticeColor,
-            borderRadius: "var(--radius)",
-            padding: "10px 14px",
-            marginBottom: 14,
-            fontSize: 13,
-          }}
-        >
-          {notice}
-        </div>
-      )}
-
-      {isUnverifiedTrader && (
-        <div
-          style={{
-            background: "var(--crane-light)",
-            border: "1px solid var(--crane)",
-            borderRadius: "var(--radius)",
-            padding: "14px 16px",
-            marginBottom: 20,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontSize: 14, lineHeight: 1.7 }}>{verifText}</span>
-          {verifBtnLabel && myVerif?.status !== "pending" && (
-            <button className="btn" onClick={handleRequest} disabled={sending}>
-              {sending ? "جاري الإرسال..." : verifBtnLabel}
-            </button>
-          )}
-        </div>
-      )}
-
       <PriceBar />
+      <AnnouncementBanner location={location === "all" ? LOCATIONS.DOCK : location} />
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button
-          className="btn"
-          style={{
-            background: location === LOCATIONS.DOCK ? "var(--kabbash)" : "transparent",
-            color: location === LOCATIONS.DOCK ? "#fff" : "var(--ink)",
-            borderColor: location === LOCATIONS.DOCK ? "var(--kabbash)" : "var(--ink)",
-          }}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <FilterBtn
+          active={location === "all"}
+          onClick={() => setLocation("all")}
+        >
+          الكل ({allAds.length})
+        </FilterBtn>
+        <FilterBtn
+          active={location === LOCATIONS.DOCK}
           onClick={() => setLocation(LOCATIONS.DOCK)}
         >
-          الرصيف البحري
-        </button>
-        <button
-          className="btn"
-          style={{
-            background: location === LOCATIONS.YARD ? "var(--kabbash)" : "transparent",
-            color: location === LOCATIONS.YARD ? "#fff" : "var(--ink)",
-            borderColor: location === LOCATIONS.YARD ? "var(--kabbash)" : "var(--ink)",
-          }}
+          الرصيف البحري ({dockCount})
+        </FilterBtn>
+        <FilterBtn
+          active={location === LOCATIONS.YARD}
           onClick={() => setLocation(LOCATIONS.YARD)}
         >
-          ساحة الجزيره
-        </button>
+          ساحة الجزيره ({yardCount})
+        </FilterBtn>
       </div>
 
-      <AnnouncementBanner location={location} />
-
-      {canManage && <AddListingForm location={location} />}
-
-      {showDemo && (
-        <p style={{ fontSize: 12, color: "var(--steel-light)", marginBottom: 10 }}>
-          الأصناف دي بيانات تجريبية للعرض فقط، هتختفي أول ما تُضاف أصناف حقيقية.
-        </p>
-      )}
-
-      {displayListings.length === 0 ? (
-        <p style={{ color: "var(--steel)", fontSize: 14 }}>
-          لا توجد أصناف مدرجة حاليًا في{" "}
-          {location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}.
-        </p>
-      ) : (
-        <div
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 14,
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
+        <h1
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: 12,
+            fontSize: 20,
+            fontWeight: 900,
+            margin: 0,
           }}
         >
-          {displayListings.map((l) => (
-            <ListingCard
-              key={l.id}
-              listing={l}
-              tonPrice={displayTonPrices[l.category]?.pricePerTon}
-              canReserve={!l.demo}
-              onReserve={(qty) => handleReserve(l, qty)}
-            />
+          الإعلانات المتاحة
+        </h1>
+        {location !== "all" && (
+          <Link
+            to={location === LOCATIONS.DOCK ? "/dock" : "/yard"}
+            style={{
+              fontSize: 13,
+              color: "var(--kabbash)",
+              fontWeight: 700,
+              textDecoration: "underline",
+            }}
+          >
+            عرض الصفحة الكاملة ←
+          </Link>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="page-loading">جاري التحميل...</div>
+      ) : displayed.length === 0 ? (
+        <div
+          style={{
+            textAlign: "center",
+            padding: "50px 20px",
+            background: "var(--paper-raised)",
+            border: "1px dashed var(--line-strong)",
+            borderRadius: 12,
+          }}
+        >
+          <p style={{ fontSize: 42, margin: 0 }}>📭</p>
+          <p
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              margin: "10px 0 4px",
+            }}
+          >
+            لا توجد إعلانات حالياً
+          </p>
+          <p style={{ fontSize: 13, color: "var(--steel)", margin: 0 }}>
+            {location === "all"
+              ? "هيتم إضافة إعلانات جديدة قريباً."
+              : "هيتم إضافة إعلانات في هذا القسم قريباً."}
+          </p>
+        </div>
+      ) : (
+        <div className="ad-grid">
+          {displayed.map((ad) => (
+            <AdCard key={ad.id} ad={ad} />
           ))}
         </div>
       )}
+
+      <style>{`
+        .ad-grid {
+          columns: 3;
+          column-gap: 14px;
+        }
+        @media (max-width: 900px) {
+          .ad-grid { columns: 2; }
+        }
+        @media (max-width: 500px) {
+          .ad-grid { columns: 1; }
+        }
+      `}</style>
     </div>
+  );
+}
+
+function FilterBtn({ active, onClick, children }) {
+  return (
+    <button
+      className="btn"
+      style={{
+        fontSize: 13,
+        padding: "7px 14px",
+        background: active ? "var(--kabbash)" : "transparent",
+        color: active ? "#fff" : "var(--ink)",
+        borderColor: active ? "var(--kabbash)" : "var(--line)",
+      }}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
