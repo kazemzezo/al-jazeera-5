@@ -246,16 +246,22 @@ export function getAvailableItems(ad) {
 // ============ الحجوزات ============
 
 // ✅ النسخة النهائية: إنشاء الحجز + خصم الكمية من الإعلان
-// (بدون update على الحجز نفسه — لأن Rules بتمنع التاجر من update reservations)
+// + توليد invoiceId + date واضحين
 export async function createAdReservation(payload, user) {
   const items = (payload.items || []).filter((it) => Number(it.qty) > 0);
   const equipment = (payload.equipment || []).filter(
     (eq) => Number(eq.hours) > 0
   );
 
+  // توليد رقم فاتورة نظيف
+  const invoiceId = "AJ5-" + Date.now().toString().slice(-8);
+  const date = new Date().toLocaleDateString("ar-EG");
+
   // 1. أنشئ الحجز
   const ref = await addDoc(collection(db, "reservations"), {
     type: "ad",
+    invoiceId,
+    date,
     adId: payload.adId,
     adTitle: payload.adTitle,
     location: payload.location,
@@ -281,7 +287,6 @@ export async function createAdReservation(payload, user) {
   try {
     await applyReservationToAd(payload.adId, items);
   } catch (err) {
-    // لو فشل → امسح الحجز (rollback)
     try {
       await deleteDoc(ref);
     } catch (delErr) {
