@@ -116,22 +116,15 @@ export default function Calculator() {
   }
 
   return (
-    <div>
-      <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>أداة الحساب</h1>
-      <p style={{ fontSize: 13, color: "var(--steel)", marginBottom: 20 }}>
-        الأسعار تُحدّث تلقائيًا حسب ما يضعه الأدمن.
-      </p>
+    <div className="calc-page">
+      <h1 className="calc-title">أداة الحساب</h1>
+      <p className="calc-subtitle">الأسعار تُحدّث تلقائيًا حسب ما يضعه الأدمن.</p>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div className="calc-location-tabs">
         {[LOCATIONS.DOCK, LOCATIONS.YARD].map((loc) => (
           <button
             key={loc}
-            className="btn"
-            style={{
-              background: location === loc ? "var(--kabbash)" : "transparent",
-              color: location === loc ? "#fff" : "var(--ink)",
-              borderColor: location === loc ? "var(--kabbash)" : "var(--ink)",
-            }}
+            className={"location-tab" + (location === loc ? " active" : "")}
             onClick={() => setLocation(loc)}
           >
             {loc === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره"}
@@ -143,35 +136,56 @@ export default function Calculator() {
         {rows.map((r, idx) => {
           const price = tonPrices[r.category]?.pricePerTon || 0;
           return (
-            <div key={idx} className="calc-row">
-              <select value={r.category} onChange={(e) => updateRow(idx, "category", e.target.value)}>
+            <div key={idx} className="calc-row calc-row--scrap">
+              <select
+                className="calc-input"
+                value={r.category}
+                onChange={(e) => updateRow(idx, "category", e.target.value)}
+              >
                 {TON_CATEGORIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <input type="number" min="0" value={r.tons} onChange={(e) => updateRow(idx, "tons", e.target.value)} style={{ width: 70 }} />
+              <input
+                className="calc-input"
+                type="number"
+                min="0"
+                value={r.tons}
+                onChange={(e) => updateRow(idx, "tons", e.target.value)}
+              />
               <span className="unit">طن</span>
               <span className="rp">{fmt(price * Number(r.tons || 0))}</span>
-              {rows.length > 1 && (
-                <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => removeRow(idx)}>حذف</button>
-              )}
+              <span className="actions">
+                {rows.length > 1 && (
+                  <button
+                    className="btn-remove"
+                    onClick={() => removeRow(idx)}
+                    title="حذف الصنف"
+                    aria-label="حذف"
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
             </div>
           );
         })}
-        <button className="btn" style={{ marginTop: 10, fontSize: 13 }} onClick={addRow}>+ إضافة صنف</button>
+        <button className="btn" style={{ marginTop: 12, fontSize: 13 }} onClick={addRow}>
+          + إضافة صنف
+        </button>
       </Section>
 
       <Section title="المعدات والعمال">
         {equipmentList.map((eq) => (
           <div key={eq.id} className="calc-row">
-            <span style={{ flex: 1 }}>{eq.name}</span>
+            <span className="label">{eq.name}</span>
             <input
+              className="calc-input"
               type="number"
               min="0"
               value={equipmentHours[eq.id] || ""}
               onChange={(e) => setEquipmentHours({ ...equipmentHours, [eq.id]: e.target.value })}
               placeholder="0"
-              style={{ width: 70 }}
             />
             <span className="unit">ساعة</span>
             <span className="rp">{fmt(Number(equipmentHours[eq.id] || 0) * eq.pricePerHour)}</span>
@@ -179,23 +193,47 @@ export default function Calculator() {
         ))}
 
         <div className="calc-row">
-          <span style={{ flex: 1 }}>عمال (من أصل {TOTAL_WORKERS})</span>
-          <input type="number" min="0" max={TOTAL_WORKERS} value={workerCount || ""} onChange={(e) => setWorkerCount(e.target.value)} placeholder="0" style={{ width: 70 }} />
+          <span className="label">عمال (من أصل {TOTAL_WORKERS})</span>
+          <input
+            className="calc-input"
+            type="number"
+            min="0"
+            max={TOTAL_WORKERS}
+            value={workerCount || ""}
+            onChange={(e) => setWorkerCount(e.target.value)}
+            placeholder="0"
+          />
           <span className="unit">عامل</span>
+          <span className="rp" />
         </div>
+
         <div className="calc-row">
-          <span style={{ flex: 1 }}>عدد ساعات العمال</span>
-          <input type="number" min="0" value={workerHours} onChange={(e) => setWorkerHours(e.target.value)} style={{ width: 70 }} />
+          <span className="label">عدد ساعات العمال</span>
+          <input
+            className="calc-input"
+            type="number"
+            min="0"
+            value={workerHours}
+            onChange={(e) => setWorkerHours(e.target.value)}
+          />
           <span className="unit">ساعة</span>
           <span className="rp">{fmt(workersTotal)}</span>
         </div>
 
-        <div className="calc-row" style={{ marginTop: 8 }}>
-          <span style={{ flex: 1 }}>عدد السيارات (صيانة الرصيف)</span>
-          <input type="number" min="0" value={carCount} onChange={(e) => setCarCount(e.target.value)} style={{ width: 70 }} />
-          <span className="unit">سيارة × {fmt(maintenanceFee)}</span>
+        <div className="calc-row">
+          <span className="label">عدد السيارات (صيانة الرصيف)</span>
+          <input
+            className="calc-input"
+            type="number"
+            min="0"
+            value={carCount}
+            onChange={(e) => setCarCount(e.target.value)}
+          />
+          <span className="unit">سيارة</span>
           <span className="rp">{fmt(maintenanceTotal)}</span>
         </div>
+
+        <p className="calc-note">سعر صيانة السيارة الواحدة: {fmt(maintenanceFee)}</p>
       </Section>
 
       <Section title="الفاتورة الإجمالية">
@@ -220,9 +258,103 @@ export default function Calculator() {
       </Section>
 
       <style>{`
-        .calc-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
-        .calc-row .unit { color: var(--steel-light); font-size: 12px; white-space: nowrap; }
-        .calc-row .rp { min-width: 90px; text-align: left; font-weight: 700; margin-inline-start: auto; }
+        .calc-title { font-size: 22px; font-weight: 900; margin: 0 0 4px; }
+        .calc-subtitle { font-size: 13px; color: var(--steel); margin: 0 0 20px; }
+
+        .calc-location-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+        .location-tab {
+          flex: 1;
+          padding: 10px 14px;
+          border-radius: var(--radius);
+          border: 1.5px solid var(--line-strong);
+          background: var(--paper-raised);
+          color: var(--ink);
+          font-weight: 700;
+          font-size: 14px;
+          cursor: pointer;
+          transition: background .2s, color .2s, border-color .2s;
+        }
+        .location-tab:hover { border-color: var(--ink); }
+        .location-tab.active {
+          background: var(--kabbash);
+          border-color: var(--kabbash);
+          color: #fff;
+        }
+
+        .calc-row {
+          display: grid;
+          grid-template-columns: minmax(110px, 1fr) 90px 60px 110px;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 0;
+          border-bottom: 1px solid var(--line);
+          font-size: 13px;
+        }
+        .calc-row--scrap {
+          grid-template-columns: minmax(110px, 1fr) 90px 60px 110px 32px;
+        }
+        .calc-row:last-child { border-bottom: none; }
+        .calc-row .label { color: var(--ink); font-weight: 600; }
+        .calc-row .unit { color: var(--steel-light); font-size: 12px; white-space: nowrap; text-align: center; }
+        .calc-row .rp { text-align: end; font-weight: 700; color: var(--ink); }
+
+        .calc-input {
+          width: 100%;
+          min-width: 0;
+          padding: 8px 10px;
+          border: 1.5px solid var(--line-strong);
+          border-radius: 8px;
+          background: var(--paper-raised);
+          color: var(--ink);
+          font-family: inherit;
+          font-size: 13px;
+          text-align: center;
+          transition: border-color .2s, box-shadow .2s;
+        }
+        .calc-input:focus {
+          outline: none;
+          border-color: var(--kabbash);
+          box-shadow: 0 0 0 3px var(--kabbash-light);
+        }
+        select.calc-input { text-align: start; padding-inline: 10px; }
+
+        .btn-remove {
+          width: 28px; height: 28px;
+          display: inline-flex; align-items: center; justify-content: center;
+          border-radius: 8px;
+          border: 1.5px solid var(--line-strong);
+          background: transparent;
+          color: var(--danger);
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: background .2s, border-color .2s;
+        }
+        .btn-remove:hover {
+          background: var(--danger-light);
+          border-color: var(--danger);
+        }
+
+        .calc-note {
+          font-size: 12px;
+          color: var(--steel);
+          margin: 12px 0 0;
+          padding-top: 10px;
+          border-top: 1px dashed var(--line);
+        }
+
+        @media (max-width: 480px) {
+          .calc-row {
+            grid-template-columns: minmax(90px, 1fr) 64px 48px 80px;
+            gap: 8px;
+            font-size: 12px;
+          }
+          .calc-row--scrap {
+            grid-template-columns: minmax(90px, 1fr) 64px 48px 80px 28px;
+          }
+          .calc-row .unit { font-size: 11px; }
+          .calc-input { padding: 6px 8px; font-size: 12px; }
+        }
       `}</style>
     </div>
   );
