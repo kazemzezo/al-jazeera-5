@@ -1,3 +1,7 @@
+import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { sendContactMessage } from "../lib/messages";
+
 function Page({ title, children }) {
   return (
     <div style={{ maxWidth: 640 }}>
@@ -22,13 +26,49 @@ export function About() {
 }
 
 export function Contact() {
+  const { user, profile } = useAuth();
+  const [name, setName] = useState(profile?.name || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [text, setText] = useState("");
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!text.trim()) return;
+    setSending(true);
+    setError("");
+    try {
+      await sendContactMessage({ name, email, text: text.trim(), uid: user?.uid });
+      setSent(true);
+      setText("");
+    } catch (err) {
+      setError("تعذر إرسال الرسالة، حاول مرة أخرى.");
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <Page title="تواصل معنا">
-      <p>
-        لأي استفسار أو طلب توثيق كتاجر معتمد، يمكنك التواصل مع إدارة الموقع
-        عبر البريد الإلكتروني الظاهر في بيانات المنصة، أو من خلال طلب
-        التوثيق المتاح مباشرة من الصفحة الرئيسية.
+      <p style={{ marginBottom: 16 }}>
+        لأي استفسار أو طلب توثيق كتاجر معتمد، ابعتلنا رسالتك وهيتم الرد عليك من إدارة الموقع.
       </p>
+
+      {sent ? (
+        <p style={{ color: "var(--kabbash)", fontWeight: 700 }}>تم إرسال رسالتك بنجاح، شكرًا لتواصلك معنا.</p>
+      ) : (
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
+          <input type="text" placeholder="الاسم" value={name} onChange={(e) => setName(e.target.value)} required />
+          <input type="email" placeholder="البريد الإلكتروني" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <textarea placeholder="رسالتك" value={text} onChange={(e) => setText(e.target.value)} required rows={5} style={{ fontFamily: "inherit", padding: 8, borderRadius: 8, border: "1px solid var(--line)" }} />
+          <button className="btn btn-primary" type="submit" disabled={sending}>
+            {sending ? "جاري الإرسال..." : "إرسال الرسالة"}
+          </button>
+          {error && <p style={{ color: "var(--danger)", fontSize: 12 }}>{error}</p>}
+        </form>
+      )}
     </Page>
   );
 }
