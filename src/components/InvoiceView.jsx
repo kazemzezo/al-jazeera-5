@@ -6,12 +6,17 @@ function fmt(n) {
 
 export default function InvoiceView({ invoice, onBack, adminActions }) {
   const isCalculator = invoice.type === "calculator";
+  const isAd = invoice.type === "ad";
+
   const locationLabel =
     invoice.location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره";
 
-  const dateLabel = invoice.date
-    ? invoice.date
-    : invoice.createdAt?.toDate?.().toLocaleDateString("ar-EG") || "—";
+  const dateLabel =
+    invoice.date ||
+    invoice.createdAt?.toDate?.().toLocaleDateString("ar-EG") ||
+    "—";
+
+  const invoiceNumber = invoice.invoiceId || invoice.id || "—";
 
   return (
     <div>
@@ -35,7 +40,9 @@ export default function InvoiceView({ invoice, onBack, adminActions }) {
             طباعة / حفظ PDF
           </button>
         </div>
-        {adminActions && <div style={{ display: "flex", gap: 8 }}>{adminActions}</div>}
+        {adminActions && (
+          <div style={{ display: "flex", gap: 8 }}>{adminActions}</div>
+        )}
       </div>
 
       <div
@@ -59,7 +66,7 @@ export default function InvoiceView({ invoice, onBack, adminActions }) {
             فاتورة الجزيره خمسه
           </h1>
           <p style={{ fontSize: 12, color: "var(--steel)", margin: 0 }}>
-            رقم الفاتورة: {invoice.invoiceId || invoice.id} · التاريخ: {dateLabel}
+            رقم الفاتورة: {invoiceNumber} · التاريخ: {dateLabel}
           </p>
         </div>
 
@@ -81,11 +88,9 @@ export default function InvoiceView({ invoice, onBack, adminActions }) {
           </span>
         </div>
 
-        {isCalculator ? (
-          <CalculatorContent invoice={invoice} />
-        ) : (
-          <ListingContent invoice={invoice} />
-        )}
+        {isCalculator && <CalculatorContent invoice={invoice} />}
+        {isAd && <AdContent invoice={invoice} />}
+        {!isCalculator && !isAd && <ListingContent invoice={invoice} />}
 
         <div
           style={{
@@ -170,6 +175,74 @@ function CalculatorContent({ invoice }) {
   );
 }
 
+// ✅ جديد: عرض حجز إعلان الرصيف
+function AdContent({ invoice }) {
+  const items = invoice.items || [];
+  const equipment = invoice.equipment || [];
+  const workerCount = Number(invoice.workerCount || 0);
+  const carCount = Number(invoice.carCount || 0);
+
+  return (
+    <>
+      {invoice.adTitle && (
+        <div
+          style={{
+            padding: "8px 12px",
+            background: "var(--paper-sunken)",
+            borderRadius: 8,
+            marginBottom: 14,
+            fontSize: 12.5,
+            color: "var(--steel)",
+          }}
+        >
+          <b style={{ color: "var(--ink)" }}>الإعلان:</b> {invoice.adTitle}
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <Group title="الأصناف">
+          {items.map((r, i) => (
+            <InvoiceLine
+              key={i}
+              label={`${r.category} - ${r.qty} طن × ${fmt(r.unitPrice)}`}
+              value={r.subtotal}
+            />
+          ))}
+        </Group>
+      )}
+
+      {equipment.length > 0 && (
+        <Group title="المعدات">
+          {equipment.map((r, i) => (
+            <InvoiceLine
+              key={i}
+              label={`${r.name} - ${r.hours} ساعة × ${fmt(r.pricePerHour)}`}
+              value={r.subtotal}
+            />
+          ))}
+        </Group>
+      )}
+
+      {(workerCount > 0 || carCount > 0) && (
+        <Group title="عمالة وسيارات">
+          {workerCount > 0 && (
+            <InvoiceLine
+              label={`عمال (${workerCount} × ${fmt(invoice.workerUnitPrice)})`}
+              value={invoice.workersTotal}
+            />
+          )}
+          {carCount > 0 && (
+            <InvoiceLine
+              label={`سيارات (${carCount} × ${fmt(invoice.carUnitPrice)})`}
+              value={invoice.carsTotal}
+            />
+          )}
+        </Group>
+      )}
+    </>
+  );
+}
+
 function ListingContent({ invoice }) {
   const qtyLabel =
     invoice.saleType === "lot"
@@ -180,7 +253,7 @@ function ListingContent({ invoice }) {
 
   return (
     <Group title="تفاصيل الحجز">
-      <Line label={`الصنف: ${invoice.category}`} value="" />
+      <Line label={`الصنف: ${invoice.category || "—"}`} value="" />
       <Line label={`الكمية: ${qtyLabel}`} value="" />
       {invoice.unitPrice > 0 && (
         <Line
@@ -208,6 +281,22 @@ function Group({ title, children }) {
         {title}
       </p>
       {children}
+    </div>
+  );
+}
+
+function InvoiceLine({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        fontSize: 13,
+        padding: "4px 0",
+      }}
+    >
+      <span>{label}</span>
+      <span style={{ fontWeight: 700 }}>{fmt(value)}</span>
     </div>
   );
 }
