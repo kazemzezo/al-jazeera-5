@@ -5,7 +5,6 @@ import {
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -16,6 +15,7 @@ import {
 import { db } from "./firebase";
 import { TON_CATEGORIES } from "./catalog";
 import { EQUIPMENT } from "./equipment";
+import { revertAdReservation } from "./ads";
 
 /* ===================== الأسعار ===================== */
 export function subscribeTonPrices(callback) {
@@ -58,7 +58,7 @@ export async function setEquipmentPrice(id, pricePerHour, uid) {
   });
 }
 
-/* ===================== الإعلانات ===================== */
+/* ===================== الإعلانات السريعة ===================== */
 export function subscribeAnnouncements(location, callback) {
   return onSnapshot(
     collection(db, "announcements"),
@@ -94,17 +94,26 @@ export async function deleteAnnouncement(id) {
   await deleteDoc(doc(db, "announcements", id));
 }
 
-/* ===================== الأصناف ===================== */
+/* ===================== الأصناف القديمة ===================== */
 export function subscribeListings(location, callback) {
-  const q = query(
+  return onSnapshot(
     collection(db, "listings"),
-    where("location", "==", location),
-    where("active", "==", true),
-    orderBy("createdAt", "desc")
+    (snap) => {
+      const items = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((l) => l.location === location && l.active === true)
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() || 0;
+          const tb = b.createdAt?.toMillis?.() || 0;
+          return tb - ta;
+        });
+      callback(items);
+    },
+    (err) => {
+      console.error("فشل تحميل الأصناف:", err);
+      callback([]);
+    }
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
 }
 
 export async function createListing(listing, user) {
@@ -122,7 +131,7 @@ export async function deactivateListing(id) {
   await setDoc(doc(db, "listings", id), { active: false }, { merge: true });
 }
 
-/* ===================== الحجوزات ===================== */
+/* ===================== الحجوزات القديمة ===================== */
 
 export async function reserveListingQuantity(listingId, qty, user, extra = {}) {
   const listingRef = doc(db, "listings", listingId);
@@ -214,35 +223,31 @@ export async function createCalculatorInvoice(invoice, user) {
 }
 
 export function subscribeAllReservations(callback, onError) {
-  const q = query(
-    collection(db, "reservations"),
-    orderBy("createdAt", "desc")
-  );
   return onSnapshot(
-    q,
+    collection(db, "reservations"),
     (snap) => {
-      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      items.sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+      callback(items);
     },
     onError
   );
 }
 
-// ✅ التعديل: نستخدم where عشان نتجاوز قاعدة Firebase
-// (بنفلتر من Firebase نفسه بدل ما نفلتر في المتصفح، فيسمح بالقراءة)
 export function subscribeMyReservations(uid, callback) {
   if (!uid) {
     callback([]);
     return () => {};
   }
-  const q = query(
-    collection(db, "reservations"),
-    where("uid", "==", uid)
-  );
+  const q = query(collection(db, "reservations"), where("uid", "==", uid));
   return onSnapshot(
     q,
     (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      // ترتيب في المتصفح (تفاديًا لطلب composite index)
       items.sort((a, b) => {
         const ta = a.createdAt?.toMillis?.() || 0;
         const tb = b.createdAt?.toMillis?.() || 0;
@@ -257,6 +262,7 @@ export function subscribeMyReservations(uid, callback) {
   );
 }
 
+// ✅ محدّث: يتعامل مع حجوزات الإعلان والحجوزات العادية
 export async function updateReservationStatus(id, newStatus, options = {}) {
   const { reason = "", uid = null } = options;
   const reservationRef = doc(db, "reservations", id);
@@ -265,6 +271,7 @@ export async function updateReservationStatus(id, newStatus, options = {}) {
   if (!snap.exists()) throw new Error("الحجز غير موجود");
   const data = snap.data();
 
+  // 1. حدّث حالة الحجز الأول
   const updatePayload = {
     status: newStatus,
     statusUpdatedAt: serverTimestamp(),
@@ -275,23 +282,35 @@ export async function updateReservationStatus(id, newStatus, options = {}) {
   }
   await updateDoc(reservationRef, updatePayload);
 
-  if (newStatus === "cancelled" && data.type === "listing" && data.listingId) {
-    try {
-      const listingRef = doc(db, "listings", data.listingId);
-      const listingSnap = await getDoc(listingRef);
-      if (listingSnap.exists()) {
-        const ld = listingSnap.data();
-        if (data.saleType === "lot") {
-          await updateDoc(listingRef, { reservedQty: 0, active: true });
-        } else {
-          const qty = Number(data.qty || 0);
-          const currentReserved = Number(ld.reservedQty || 0);
-          const newReserved = Math.max(0, currentReserved - qty);
-          await updateDoc(listingRef, { reservedQty: newReserved });
-        }
+  // 2. لو إلغاء → رجّع الكميات
+  if (newStatus === "cancelled") {
+    // حجز إعلان جديد
+    if (data.type === "ad" && data.adId && data.items) {
+      try {
+        await revertAdReservation(data.adId, data.items);
+      } catch (err) {
+        console.error("فشل إرجاع الكمية للإعلان:", err);
       }
-    } catch (rollbackErr) {
-      console.error("فشل إرجاع الكمية للمخزون:", rollbackErr);
+    }
+    // حجز صنف قديم
+    else if (data.type === "listing" && data.listingId) {
+      try {
+        const listingRef = doc(db, "listings", data.listingId);
+        const listingSnap = await getDoc(listingRef);
+        if (listingSnap.exists()) {
+          const ld = listingSnap.data();
+          if (data.saleType === "lot") {
+            await updateDoc(listingRef, { reservedQty: 0, active: true });
+          } else {
+            const qty = Number(data.qty || 0);
+            const currentReserved = Number(ld.reservedQty || 0);
+            const newReserved = Math.max(0, currentReserved - qty);
+            await updateDoc(listingRef, { reservedQty: newReserved });
+          }
+        }
+      } catch (err) {
+        console.error("فشل إرجاع الكمية للصنف:", err);
+      }
     }
   }
 }
