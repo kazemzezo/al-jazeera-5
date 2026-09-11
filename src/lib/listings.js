@@ -59,7 +59,6 @@ export async function setEquipmentPrice(id, pricePerHour, uid) {
 }
 
 /* ===================== الإعلانات ===================== */
-// FIX: بدون where+orderBy (كان محتاج composite index ويفشل بصمت)
 export function subscribeAnnouncements(location, callback) {
   return onSnapshot(
     collection(db, "announcements"),
@@ -123,9 +122,8 @@ export async function deactivateListing(id) {
   await setDoc(doc(db, "listings", id), { active: false }, { merge: true });
 }
 
-/* ===================== الحجوزات (Reservations) ===================== */
+/* ===================== الحجوزات ===================== */
 
-// حجز كمية من صنف مع حفظ السعر
 export async function reserveListingQuantity(listingId, qty, user, extra = {}) {
   const listingRef = doc(db, "listings", listingId);
   const result = await runTransaction(db, async (tx) => {
@@ -168,7 +166,6 @@ export async function reserveListingQuantity(listingId, qty, user, extra = {}) {
   return result;
 }
 
-// حجز لوط كامل
 export async function reserveLot(listingId, user) {
   const listingRef = doc(db, "listings", listingId);
   const result = await runTransaction(db, async (tx) => {
@@ -203,7 +200,6 @@ export async function reserveLot(listingId, user) {
   return result;
 }
 
-// حفظ فاتورة الحاسبة كاملة
 export async function createCalculatorInvoice(invoice, user) {
   const ref = await addDoc(collection(db, "reservations"), {
     type: "calculator",
@@ -217,7 +213,6 @@ export async function createCalculatorInvoice(invoice, user) {
   return ref.id;
 }
 
-// كل الحجوزات (نفلتر في الواجهة — أسرع وأخف من composite index)
 export function subscribeAllReservations(callback, onError) {
   const q = query(
     collection(db, "reservations"),
@@ -232,35 +227,68 @@ export function subscribeAllReservations(callback, onError) {
   );
 }
 
-// تحديث حالة الحجز (لو إلغاء → نرجّع الكمية للمخزون)
+// ✅ جديد: حجوزات التاجر الحالي
+export function subscribeMyReservations(uid, callback) {
+  if (!uid) {
+    callback([]);
+    return () => {};
+  }
+  return onSnapshot(
+    collection(db, "reservations"),
+    (snap) => {
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const filtered = all
+        .filter((r) => r.uid === uid)
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() || 0;
+          const tb = b.createdAt?.toMillis?.() || 0;
+          return tb - ta;
+        });
+      callback(filtered);
+    },
+    (err) => {
+      console.error("فشل تحميل حجوزاتي:", err);
+      callback([]);
+    }
+  );
+}
+
+// ✅ محدّث: نحدّث الحالة الأول، وبعدها نرجّع المخزون
 export async function updateReservationStatus(id, newStatus, options = {}) {
   const { reason = "", uid = null } = options;
   const reservationRef = doc(db, "reservations", id);
+
   const snap = await getDoc(reservationRef);
   if (!snap.exists()) throw new Error("الحجز غير موجود");
   const data = snap.data();
 
-  // لو إلغاء ومرتبط بصنف، نرجّع الكمية
-  if (newStatus === "cancelled" && data.type === "listing" && data.listingId) {
-    const listingRef = doc(db, "listings", data.listingId);
-    const listingSnap = await getDoc(listingRef);
-    if (listingSnap.exists()) {
-      const ld = listingSnap.data();
-      const qty = Number(data.qty || 0);
-      if (data.saleType === "lot") {
-        await setDoc(listingRef, { reservedQty: 0, active: true }, { merge: true });
-      } else {
-        const currentReserved = Number(ld.reservedQty || 0);
-        const newReserved = Math.max(0, currentReserved - qty);
-        await setDoc(listingRef, { reservedQty: newReserved }, { merge: true });
-      }
-    }
-  }
-
-  await updateDoc(reservationRef, {
+  const updatePayload = {
     status: newStatus,
     statusUpdatedAt: serverTimestamp(),
     statusUpdatedBy: uid,
-    ...(newStatus === "cancelled" ? { cancelReason: reason } : {}),
-  });
+  };
+  if (newStatus === "cancelled" && reason) {
+    updatePayload.cancelReason = reason;
+  }
+  await updateDoc(reservationRef, updatePayload);
+
+  if (newStatus === "cancelled" && data.type === "listing" && data.listingId) {
+    try {
+      const listingRef = doc(db, "listings", data.listingId);
+      const listingSnap = await getDoc(listingRef);
+      if (listingSnap.exists()) {
+        const ld = listingSnap.data();
+        if (data.saleType === "lot") {
+          await updateDoc(listingRef, { reservedQty: 0, active: true });
+        } else {
+          const qty = Number(data.qty || 0);
+          const currentReserved = Number(ld.reservedQty || 0);
+          const newReserved = Math.max(0, currentReserved - qty);
+          await updateDoc(listingRef, { reservedQty: newReserved });
+        }
+      }
+    } catch (rollbackErr) {
+      console.error("فشل إرجاع الكمية للمخزون:", rollbackErr);
+    }
+  }
 }
