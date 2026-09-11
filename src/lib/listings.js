@@ -227,24 +227,28 @@ export function subscribeAllReservations(callback, onError) {
   );
 }
 
-// ✅ جديد: حجوزات التاجر الحالي
+// ✅ التعديل: نستخدم where عشان نتجاوز قاعدة Firebase
+// (بنفلتر من Firebase نفسه بدل ما نفلتر في المتصفح، فيسمح بالقراءة)
 export function subscribeMyReservations(uid, callback) {
   if (!uid) {
     callback([]);
     return () => {};
   }
-  return onSnapshot(
+  const q = query(
     collection(db, "reservations"),
+    where("uid", "==", uid)
+  );
+  return onSnapshot(
+    q,
     (snap) => {
-      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const filtered = all
-        .filter((r) => r.uid === uid)
-        .sort((a, b) => {
-          const ta = a.createdAt?.toMillis?.() || 0;
-          const tb = b.createdAt?.toMillis?.() || 0;
-          return tb - ta;
-        });
-      callback(filtered);
+      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // ترتيب في المتصفح (تفاديًا لطلب composite index)
+      items.sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+      callback(items);
     },
     (err) => {
       console.error("فشل تحميل حجوزاتي:", err);
@@ -253,7 +257,6 @@ export function subscribeMyReservations(uid, callback) {
   );
 }
 
-// ✅ محدّث: نحدّث الحالة الأول، وبعدها نرجّع المخزون
 export async function updateReservationStatus(id, newStatus, options = {}) {
   const { reason = "", uid = null } = options;
   const reservationRef = doc(db, "reservations", id);
