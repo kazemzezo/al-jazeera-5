@@ -10,7 +10,7 @@ import {
   setEquipmentPrice,
 } from "../lib/listings";
 import {
-  subscribePendingVerifications,
+  subscribeVerificationsByStatus,
   approveVerification,
   rejectVerification,
 } from "../lib/verification";
@@ -35,11 +35,6 @@ export default function AdminPanel() {
       {tab === "equipment" && <EquipmentTab uid={user.uid} />}
       {tab === "verification" && <VerificationTab />}
       {tab === "messages" && <MessagesTab />}
-
-      <style>{`
-        .admin-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-        .admin-row .unit { color: var(--steel-light); font-size: 12px; }
-      `}</style>
     </div>
   );
 }
@@ -138,13 +133,16 @@ function EquipmentTab({ uid }) {
 }
 
 function VerificationTab() {
+  const [filter, setFilter] = useState("pending");
   const [requests, setRequests] = useState([]);
   const [busyId, setBusyId] = useState(null);
+  const [rejectingId, setRejectingId] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   useEffect(() => {
-    const unsub = subscribePendingVerifications(setRequests);
+    const unsub = subscribeVerificationsByStatus(filter, setRequests);
     return () => unsub();
-  }, []);
+  }, [filter]);
 
   async function handleApprove(req) {
     setBusyId(req.id);
@@ -155,37 +153,142 @@ function VerificationTab() {
     }
   }
 
-  async function handleReject(req) {
+  async function confirmReject(req) {
+    if (!rejectingId) return;
     setBusyId(req.id);
     try {
-      await rejectVerification(req.id);
+      await rejectVerification(req.id, rejectReason.trim());
+      setRejectingId(null);
+      setRejectReason("");
     } finally {
       setBusyId(null);
     }
   }
 
-  if (requests.length === 0) {
-    return <p style={{ fontSize: 13, color: "var(--steel)" }}>لا توجد طلبات توثيق معلّقة حاليًا.</p>;
-  }
+  const labels = {
+    pending: "معلق",
+    approved: "مقبول",
+    rejected: "مرفوض",
+    all: "الكل",
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {requests.map((req) => (
-        <div key={req.id} style={{ background: "var(--paper-raised)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{req.name || req.email}</p>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--steel)" }}>{req.email}</p>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" style={{ padding: "6px 14px", fontSize: 13 }} onClick={() => handleApprove(req)} disabled={busyId === req.id}>
-              توثيق
-            </button>
-            <button className="btn" style={{ padding: "6px 14px", fontSize: 13 }} onClick={() => handleReject(req)} disabled={busyId === req.id}>
-              رفض
-            </button>
-          </div>
+    <div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {["pending", "approved", "rejected", "all"].map((s) => (
+          <button
+            key={s}
+            className="btn"
+            style={{
+              fontSize: 12,
+              padding: "5px 12px",
+              background: filter === s ? "var(--ink)" : "transparent",
+              color: filter === s ? "var(--paper)" : "var(--ink)",
+              borderColor: filter === s ? "var(--ink)" : "var(--line)",
+            }}
+            onClick={() => setFilter(s)}
+          >
+            {labels[s]}
+          </button>
+        ))}
+      </div>
+
+      {requests.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--steel)" }}>لا توجد طلبات في هذه الحالة.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {requests.map((req) => (
+            <div
+              key={req.id}
+              style={{
+                background: "var(--paper-raised)",
+                border: "1px solid var(--line)",
+                borderRadius: "var(--radius)",
+                padding: 14,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{req.name || req.email}</p>
+                  <p style={{ margin: "2px 0", fontSize: 12, color: "var(--steel)" }}>{req.email}</p>
+                  {req.phone && (
+                    <p style={{ margin: "2px 0", fontSize: 12, color: "var(--steel)" }}>
+                      📞 {req.phone}
+                    </p>
+                  )}
+                  {req.notes && (
+                    <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--ink)" }}>
+                      <b>ملاحظات:</b> {req.notes}
+                    </p>
+                  )}
+                  {req.status === "rejected" && req.rejectReason && (
+                    <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--danger)" }}>
+                      <b>سبب الرفض:</b> {req.rejectReason}
+                    </p>
+                  )}
+                </div>
+
+                {req.status === "pending" && rejectingId !== req.id && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: "6px 14px", fontSize: 13 }}
+                      onClick={() => handleApprove(req)}
+                      disabled={busyId === req.id}
+                    >
+                      توثيق
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ padding: "6px 14px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger)" }}
+                      onClick={() => { setRejectingId(req.id); setRejectReason(""); }}
+                      disabled={busyId === req.id}
+                    >
+                      رفض
+                    </button>
+                  </div>
+                )}
+
+                {req.status === "approved" && (
+                  <span className="badge" style={{ alignSelf: "flex-start" }}>✅ موثق</span>
+                )}
+                {req.status === "rejected" && (
+                  <span className="badge badge-danger" style={{ alignSelf: "flex-start" }}>❌ مرفوض</span>
+                )}
+              </div>
+
+              {rejectingId === req.id && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
+                  <input
+                    className="input"
+                    placeholder="سبب الرفض (سيظهر للتاجر)"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn"
+                      style={{ background: "var(--danger)", borderColor: "var(--danger)", color: "#fff", fontSize: 13 }}
+                      onClick={() => confirmReject(req)}
+                      disabled={busyId === req.id}
+                    >
+                      تأكيد الرفض
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ fontSize: 13 }}
+                      onClick={() => { setRejectingId(null); setRejectReason(""); }}
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
