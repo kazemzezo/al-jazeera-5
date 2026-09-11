@@ -9,11 +9,8 @@ import {
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -169,6 +166,35 @@ export async function applyReservationToAd(adId, reservedItems) {
   return newStatus;
 }
 
+// ✅ جديد: إرجاع الكمية للإعلان (عند الرفض أو الإلغاء)
+export async function revertAdReservation(adId, reservedItems) {
+  const adRef = doc(db, "ads", adId);
+  const snap = await getDoc(adRef);
+  if (!snap.exists()) return;
+  const data = snap.data();
+  const items = (data.items || []).map((it) => {
+    const r = reservedItems.find((x) => x.category === it.category);
+    if (!r) return it;
+    return {
+      ...it,
+      reservedQty: Math.max(
+        0,
+        Number(it.reservedQty || 0) - Number(r.qty || 0)
+      ),
+    };
+  });
+  // لو الإعلان كان closed، نسيبه closed؛ غير كده نحدّث الحالة
+  const newStatus =
+    data.status === AD_STATUS.CLOSED
+      ? AD_STATUS.CLOSED
+      : computeAdStatus(items);
+  await updateDoc(adRef, {
+    items,
+    status: newStatus,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function closeAd(id, uid) {
   await updateDoc(doc(db, "ads", id), {
     status: AD_STATUS.CLOSED,
@@ -219,9 +245,9 @@ export function getAvailableItems(ad) {
     .filter((it) => it.available > 0);
 }
 
-// ============ الحجوزات (جديد) ============
+// ============ الحجوزات ============
 
-// إنشاء حجز جديد على إعلان
+// ✅ جديد: بيخصم من الإعلان فوراً
 export async function createAdReservation(payload, user) {
   const items = (payload.items || []).filter((it) => Number(it.qty) > 0);
   const equipment = (payload.equipment || []).filter(
@@ -248,7 +274,19 @@ export async function createAdReservation(payload, user) {
     traderName: payload.traderName || user.displayName || user.email,
     traderEmail: user.email || "",
     status: "new",
+    adApplied: false, // هنحدّثها لـ true بعد الخصم
     createdAt: serverTimestamp(),
   });
+
+  // خصم فوري من الإعلان
+  try {
+    await applyReservationToAd(payload.adId, items);
+    await updateDoc(ref, { adApplied: true });
+  } catch (err) {
+    // لو الخصم فشل، نمسح الحجز
+    await deleteDoc(ref);
+    throw err;
+  }
+
   return ref.id;
 }
