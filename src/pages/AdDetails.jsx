@@ -12,16 +12,19 @@ import { LOCATIONS } from "../lib/catalog";
 import { useAuth } from "../context/AuthContext";
 import { useGuestPrompt } from "../context/GuestPromptContext";
 import { canReserve as canReserveRole } from "../lib/roles";
+import AdReserveModal from "../components/AdReserveModal";
 
 export default function AdDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, role, profile } = useAuth();
+  const { user, role } = useAuth();
   const { promptLogin, promptVerification } = useGuestPrompt();
 
   const [ad, setAd] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [succeeded, setSucceeded] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeAd(
@@ -49,16 +52,11 @@ export default function AdDetails() {
       promptVerification("لإتمام الحجز، لازم توثق حسابك أولاً.");
       return;
     }
-    // ⏳ سيتم تفعيل نموذج الحجز في التحديث القادم
-    alert(
-      "شكراً لك! نظام الحجز التفاعلي هيتفعّل في التحديث القادم. حالياً تقدر تشوف تفاصيل الإعلان."
-    );
+    setShowModal(true);
   }
 
   if (loading) {
-    return (
-      <div className="page-loading">جاري تحميل الإعلان...</div>
-    );
+    return <div className="page-loading">جاري تحميل الإعلان...</div>;
   }
 
   if (notFound || !ad) {
@@ -83,8 +81,7 @@ export default function AdDetails() {
   const reservable = isAdReservable(ad);
   const locationLabel =
     ad.location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره";
-  const dateLabel =
-    ad.createdAt?.toDate?.().toLocaleDateString("ar-EG") || "—";
+  const dateLabel = ad.createdAt?.toDate?.().toLocaleDateString("ar-EG") || "—";
 
   return (
     <div className="ad-details">
@@ -95,6 +92,21 @@ export default function AdDetails() {
       >
         ← رجوع
       </button>
+
+      {succeeded && (
+        <div
+          style={{
+            background: "var(--kabbash-light)",
+            border: "1px solid var(--kabbash)",
+            borderRadius: "var(--radius)",
+            padding: "10px 14px",
+            marginBottom: 14,
+            fontSize: 13,
+          }}
+        >
+          ✅ تم إرسال طلب الحجز بنجاح. تقدر تتابعه من صفحة "حسابي".
+        </div>
+      )}
 
       <div className="ad-details-card">
         {ad.imageUrl ? (
@@ -115,11 +127,7 @@ export default function AdDetails() {
           <div className="ad-details-meta">
             <span className="ad-details-badge">{locationLabel}</span>
             <span className="ad-details-date">📅 {dateLabel}</span>
-            <span
-              className={
-                "ad-details-status status-" + ad.status
-              }
-            >
+            <span className={"ad-details-status status-" + ad.status}>
               {AD_STATUS_LABELS[ad.status]}
             </span>
           </div>
@@ -133,8 +141,7 @@ export default function AdDetails() {
           <h3 className="ad-details-subtitle">الأصناف المتاحة</h3>
           <div className="ad-details-items">
             {(ad.items || []).map((it, i) => {
-              const avail =
-                Number(it.qty || 0) - Number(it.reservedQty || 0);
+              const avail = Number(it.qty || 0) - Number(it.reservedQty || 0);
               const itemTotal = Number(it.qty) * Number(it.unitPrice);
               const soldOut = avail <= 0;
               return (
@@ -199,11 +206,19 @@ export default function AdDetails() {
         </div>
       </div>
 
+      {showModal && (
+        <AdReserveModal
+          ad={ad}
+          onClose={() => setShowModal(false)}
+          onSuccess={() => {
+            setSucceeded(true);
+            setShowModal(false);
+          }}
+        />
+      )}
+
       <style>{`
-        .ad-details {
-          max-width: 760px;
-          margin: 0 auto;
-        }
+        .ad-details { max-width: 760px; margin: 0 auto; }
         .ad-details-card {
           background: var(--paper-raised);
           border: 1px solid var(--line);
@@ -229,9 +244,7 @@ export default function AdDetails() {
           font-size: 64px;
           color: var(--steel-light);
         }
-        .ad-details-body {
-          padding: 22px;
-        }
+        .ad-details-body { padding: 22px; }
         .ad-details-meta {
           display: flex;
           gap: 10px;
@@ -247,31 +260,17 @@ export default function AdDetails() {
           border-radius: 999px;
           font-weight: 700;
         }
-        .ad-details-date {
-          color: var(--steel);
-        }
+        .ad-details-date { color: var(--steel); }
         .ad-details-status {
           padding: 3px 10px;
           border-radius: 999px;
           font-weight: 700;
           margin-inline-start: auto;
         }
-        .status-active {
-          background: var(--kabbash-light);
-          color: var(--kabbash);
-        }
-        .status-partial {
-          background: var(--crane-light);
-          color: var(--crane);
-        }
-        .status-sold_out {
-          background: var(--paper-sunken);
-          color: var(--steel);
-        }
-        .status-closed {
-          background: var(--danger-light);
-          color: var(--danger);
-        }
+        .status-active { background: var(--kabbash-light); color: var(--kabbash); }
+        .status-partial { background: var(--crane-light); color: var(--crane); }
+        .status-sold_out { background: var(--paper-sunken); color: var(--steel); }
+        .status-closed { background: var(--danger-light); color: var(--danger); }
         .ad-details-title {
           margin: 0 0 10px;
           font-size: 22px;
@@ -305,37 +304,23 @@ export default function AdDetails() {
           gap: 12px;
           flex-wrap: wrap;
         }
-        .ad-details-item.item-soldout {
-          opacity: 0.55;
-        }
+        .ad-details-item.item-soldout { opacity: 0.55; }
         .item-info {
           display: flex;
           flex-direction: column;
           gap: 2px;
           min-width: 120px;
         }
-        .item-category {
-          font-weight: 700;
-          font-size: 14px;
-        }
-        .item-available {
-          font-size: 12px;
-          color: var(--steel);
-        }
+        .item-category { font-weight: 700; font-size: 14px; }
+        .item-available { font-size: 12px; color: var(--steel); }
         .item-price {
           display: flex;
           flex-direction: column;
           gap: 2px;
           text-align: end;
         }
-        .item-unit {
-          font-size: 12px;
-          color: var(--steel);
-        }
-        .item-total {
-          font-weight: 800;
-          font-size: 14px;
-        }
+        .item-unit { font-size: 12px; color: var(--steel); }
+        .item-total { font-weight: 800; font-size: 14px; }
         .ad-details-total {
           display: flex;
           justify-content: space-between;
@@ -346,10 +331,7 @@ export default function AdDetails() {
           font-size: 16px;
           font-weight: 700;
         }
-        .ad-details-total-value {
-          font-size: 22px;
-          font-weight: 900;
-        }
+        .ad-details-total-value { font-size: 22px; font-weight: 900; }
         .ad-details-cta {
           width: 100%;
           margin-top: 12px;
