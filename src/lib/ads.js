@@ -166,7 +166,6 @@ export async function applyReservationToAd(adId, reservedItems) {
   return newStatus;
 }
 
-// ✅ جديد: إرجاع الكمية للإعلان (عند الرفض أو الإلغاء)
 export async function revertAdReservation(adId, reservedItems) {
   const adRef = doc(db, "ads", adId);
   const snap = await getDoc(adRef);
@@ -183,7 +182,6 @@ export async function revertAdReservation(adId, reservedItems) {
       ),
     };
   });
-  // لو الإعلان كان closed، نسيبه closed؛ غير كده نحدّث الحالة
   const newStatus =
     data.status === AD_STATUS.CLOSED
       ? AD_STATUS.CLOSED
@@ -247,13 +245,15 @@ export function getAvailableItems(ad) {
 
 // ============ الحجوزات ============
 
-// ✅ جديد: بيخصم من الإعلان فوراً
+// ✅ النسخة النهائية: إنشاء الحجز + خصم الكمية من الإعلان
+// (بدون update على الحجز نفسه — لأن Rules بتمنع التاجر من update reservations)
 export async function createAdReservation(payload, user) {
   const items = (payload.items || []).filter((it) => Number(it.qty) > 0);
   const equipment = (payload.equipment || []).filter(
     (eq) => Number(eq.hours) > 0
   );
 
+  // 1. أنشئ الحجز
   const ref = await addDoc(collection(db, "reservations"), {
     type: "ad",
     adId: payload.adId,
@@ -274,17 +274,19 @@ export async function createAdReservation(payload, user) {
     traderName: payload.traderName || user.displayName || user.email,
     traderEmail: user.email || "",
     status: "new",
-    adApplied: false, // هنحدّثها لـ true بعد الخصم
     createdAt: serverTimestamp(),
   });
 
-  // خصم فوري من الإعلان
+  // 2. خصم من الإعلان
   try {
     await applyReservationToAd(payload.adId, items);
-    await updateDoc(ref, { adApplied: true });
   } catch (err) {
-    // لو الخصم فشل، نمسح الحجز
-    await deleteDoc(ref);
+    // لو فشل → امسح الحجز (rollback)
+    try {
+      await deleteDoc(ref);
+    } catch (delErr) {
+      console.error("فشل التراجع عن الحجز:", delErr);
+    }
     throw err;
   }
 
