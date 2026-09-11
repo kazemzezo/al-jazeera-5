@@ -1305,8 +1305,6 @@ function PricesTab({ uid }) {
       </button>
     </div>
   );
-}
-
 /* ===================== المعدات ===================== */
 
 function EquipmentTab({ uid }) {
