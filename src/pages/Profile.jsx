@@ -52,6 +52,27 @@ function statusStyle(status) {
   return base;
 }
 
+// ✅ حساب ملخص حجز الإعلان
+function getReservationTitle(r) {
+  if (r.type === "calculator") {
+    return `فاتورة من الحاسبة · ${r.location === "dock" ? "الرصيف" : "الساحة"}`;
+  }
+  if (r.type === "ad") {
+    const itemCount = r.items?.length || 0;
+    const totalQty = (r.items || []).reduce(
+      (s, it) => s + Number(it.qty || 0),
+      0
+    );
+    const firstCat = r.items?.[0]?.category || "";
+    const extra = itemCount > 1 ? ` و${itemCount - 1} صنف آخر` : "";
+    return `${firstCat}${extra} · ${totalQty} طن`;
+  }
+  // listing
+  return `${r.category} · ${r.qty} ${
+    r.saleType === "lot" ? "لوط" : r.saleType === "piece" ? "قطعة" : "طن"
+  }`;
+}
+
 export default function Profile() {
   const { user, profile, role } = useAuth();
   const { promptVerification } = useGuestPrompt();
@@ -198,7 +219,7 @@ export default function Profile() {
 
         {myReservations.length === 0 ? (
           <p style={{ fontSize: 13, color: "var(--steel)", margin: 0 }}>
-            لسه مفيش حجوزات. اعمل حجز من أداة الحساب أو من الصفحة الرئيسية.
+            لسه مفيش حجوزات. اعمل حجز من أعلانات الرئيسية.
           </p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -223,7 +244,7 @@ export default function Profile() {
                       gap: 8,
                     }}
                   >
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div
                         style={{
                           display: "flex",
@@ -253,18 +274,19 @@ export default function Profile() {
                           fontWeight: 600,
                         }}
                       >
-                        {r.type === "calculator"
-                          ? `فاتورة من الحاسبة · ${
-                              r.location === "dock" ? "الرصيف" : "الساحة"
-                            }`
-                          : `${r.category} · ${r.qty} ${
-                              r.saleType === "lot"
-                                ? "لوط"
-                                : r.saleType === "piece"
-                                ? "قطعة"
-                                : "طن"
-                            }`}
+                        {getReservationTitle(r)}
                       </p>
+                      {r.adTitle && (
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 11.5,
+                            color: "var(--steel)",
+                          }}
+                        >
+                          {r.adTitle}
+                        </p>
+                      )}
                       <p
                         style={{
                           margin: 0,
@@ -313,7 +335,7 @@ export default function Profile() {
         )}
       </div>
 
-      {/* حذف الحساب — زي ما كان */}
+      {/* حذف الحساب */}
       <div
         style={{
           background: "var(--paper-raised)",
@@ -475,10 +497,7 @@ function VerificationStatus({ loading, verification, onRequest }) {
 
   if (verification.status === "approved") {
     return (
-      <div
-        className="badge"
-        style={{ padding: "8px 14px", fontSize: 13 }}
-      >
+      <div className="badge" style={{ padding: "8px 14px", fontSize: 13 }}>
         ✅ حسابك موثق
       </div>
     );
