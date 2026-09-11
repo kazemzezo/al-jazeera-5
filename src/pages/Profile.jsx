@@ -7,6 +7,8 @@ import { useGuestPrompt } from "../context/GuestPromptContext";
 import { db } from "../lib/firebase";
 import { ROLES } from "../lib/roles";
 import { subscribeMyLatestVerification } from "../lib/verification";
+import { subscribeMyReservations } from "../lib/listings";
+import InvoiceView from "../components/InvoiceView";
 
 const ROLE_LABELS = {
   [ROLES.ADMIN]: "أدمن",
@@ -18,6 +20,30 @@ const ROLE_LABELS = {
   [ROLES.DRIVER_FORKLIFT]: "سائق الرافعة الشوكية",
 };
 
+const RES_STATUS_LABELS = {
+  new: "🟡 جديد",
+  contacted: "🔵 تم التواصل",
+  completed: "🟢 مكتمل",
+  cancelled: "🔴 ملغي",
+};
+
+function statusStyle(status) {
+  const base = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "3px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+  };
+  if (status === "new") return { ...base, background: "var(--crane-light)", color: "var(--crane)" };
+  if (status === "contacted") return { ...base, background: "var(--kabbash-light)", color: "var(--steel)" };
+  if (status === "completed") return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+  if (status === "cancelled") return { ...base, background: "var(--danger-light)", color: "var(--danger)" };
+  return base;
+}
+
 export default function Profile() {
   const { user, profile, role } = useAuth();
   const { promptVerification } = useGuestPrompt();
@@ -27,6 +53,8 @@ export default function Profile() {
   const [error, setError] = useState("");
   const [verification, setVerification] = useState(null);
   const [loadingVerif, setLoadingVerif] = useState(true);
+  const [myReservations, setMyReservations] = useState([]);
+  const [viewing, setViewing] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -34,6 +62,12 @@ export default function Profile() {
       setVerification(v);
       setLoadingVerif(false);
     });
+    return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeMyReservations(user.uid, setMyReservations);
     return () => unsub();
   }, [user]);
 
@@ -54,10 +88,14 @@ export default function Profile() {
     }
   }
 
+  if (viewing) {
+    return <InvoiceView invoice={viewing} onBack={() => setViewing(null)} />;
+  }
+
   const isVerified = role === ROLES.VERIFIED_TRADER || role === ROLES.ADMIN;
 
   return (
-    <div style={{ maxWidth: 520 }}>
+    <div style={{ maxWidth: 620 }}>
       <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 16 }}>حسابي</h1>
 
       <div
@@ -101,6 +139,84 @@ export default function Profile() {
           ✅ حسابك موثق — يمكنك تأكيد الحجوزات
         </div>
       )}
+
+      <div
+        style={{
+          background: "var(--paper-raised)",
+          border: "1px solid var(--line)",
+          borderRadius: "var(--radius-lg)",
+          padding: 18,
+          marginBottom: 16,
+        }}
+      >
+        <p style={{ fontSize: 14, fontWeight: 800, margin: "0 0 12px" }}>
+          حجوزاتي ({myReservations.length})
+        </p>
+
+        {myReservations.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--steel)", margin: 0 }}>
+            لسه مفيش حجوزات. اعمل حجز من أداة الحساب أو من الصفحة الرئيسية.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {myReservations.map((r) => {
+              const dateLabel =
+                r.createdAt?.toDate?.().toLocaleString("ar-EG") || r.date || "—";
+              return (
+                <div
+                  key={r.id}
+                  style={{
+                    background: "var(--paper-sunken)",
+                    border: "1px solid var(--line)",
+                    borderRadius: "var(--radius)",
+                    padding: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={statusStyle(r.status)}>
+                          {RES_STATUS_LABELS[r.status] || r.status}
+                        </span>
+                        {r.invoiceId && (
+                          <span style={{ fontSize: 11, color: "var(--steel-light)" }}>
+                            {r.invoiceId}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ margin: "6px 0 2px", fontSize: 13.5, fontWeight: 600 }}>
+                        {r.type === "calculator"
+                          ? `فاتورة من الحاسبة · ${r.location === "dock" ? "الرصيف" : "الساحة"}`
+                          : `${r.category} · ${r.qty} ${r.saleType === "lot" ? "لوط" : r.saleType === "piece" ? "قطعة" : "طن"}`}
+                      </p>
+                      <p style={{ margin: 0, fontSize: 11.5, color: "var(--steel-light)" }}>
+                        {dateLabel}
+                      </p>
+                      {r.status === "cancelled" && r.cancelReason && (
+                        <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--danger)" }}>
+                          <b>سبب الإلغاء:</b> {r.cancelReason}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                      <span style={{ fontSize: 16, fontWeight: 900 }}>
+                        {Number(r.grandTotal || 0).toLocaleString("ar-EG")}ج
+                      </span>
+                      <button
+                        className="btn"
+                        style={{ fontSize: 11.5, padding: "4px 10px" }}
+                        onClick={() => setViewing(r)}
+                      >
+                        عرض الفاتورة
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div
         style={{
