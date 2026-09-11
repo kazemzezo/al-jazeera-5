@@ -4,7 +4,6 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   updateDoc,
@@ -36,22 +35,24 @@ export async function requestVerification(user, profile, extra = {}) {
   });
 }
 
-// كل الطلبات (بدون فلتر من Firebase — بنفلتر في الواجهة)
+// ✅ كل الطلبات — بدون orderBy (نرتّب في المتصفح)
 export function subscribeAllVerifications(callback, onError) {
-  const q = query(
-    collection(db, "verification_requests"),
-    orderBy("createdAt", "desc")
-  );
   return onSnapshot(
-    q,
+    collection(db, "verification_requests"),
     (snap) => {
-      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      items.sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+      callback(items);
     },
     onError
   );
 }
 
-// للتاجر: آخر طلب
+// ✅ للتاجر: آخر طلب — بدون orderBy (نرتّب في المتصفح)
 export function subscribeMyLatestVerification(uid, callback) {
   if (!uid) {
     callback(null);
@@ -59,18 +60,31 @@ export function subscribeMyLatestVerification(uid, callback) {
   }
   const q = query(
     collection(db, "verification_requests"),
-    where("uid", "==", uid),
-    orderBy("createdAt", "desc")
+    where("uid", "==", uid)
   );
-  return onSnapshot(q, (snap) => {
-    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    callback(docs[0] || null);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      items.sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+      callback(items[0] || null);
+    },
+    (err) => {
+      console.error("فشل تحميل حالة التوثيق:", err);
+      callback(null);
+    }
+  );
 }
 
 export async function approveVerification(request) {
   // 1. وثّق المستخدم
-  await updateDoc(doc(db, "users", request.uid), { role: ROLES.VERIFIED_TRADER });
+  await updateDoc(doc(db, "users", request.uid), {
+    role: ROLES.VERIFIED_TRADER,
+  });
 
   // 2. اقفل كل الطلبات المعلقة لنفس المستخدم (مش بس ده)
   const pendingQuery = query(
