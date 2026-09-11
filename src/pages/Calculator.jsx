@@ -3,9 +3,12 @@ import { useAuth } from "../context/AuthContext";
 import { useGuestPrompt } from "../context/GuestPromptContext";
 import { canReserve as canReserveRole } from "../lib/roles";
 import { TON_CATEGORIES, LOCATIONS, SITE_MAINTENANCE_FEE } from "../lib/catalog";
-import { EQUIPMENT, WORKER_PRICE_PER_CAR, TOTAL_WORKERS } from "../lib/equipment";
+import { EQUIPMENT, TOTAL_WORKERS } from "../lib/equipment";
 import { DEMO_TON_PRICES } from "../lib/demoData";
 import { subscribeTonPrices, subscribeEquipmentPrices } from "../lib/listings";
+
+// سعر تحميل الطن الواحد (للعامل أو أكثر) — عدّله من هنا لو حبيت
+const LOADING_PRICE_PER_TON = 30;
 
 function fmt(n) {
   return Number(n || 0).toLocaleString("ar-EG") + "ج";
@@ -19,7 +22,7 @@ export default function Calculator() {
   const [rows, setRows] = useState([{ category: TON_CATEGORIES[0], tons: 1 }]);
   const [equipmentHours, setEquipmentHours] = useState({});
   const [workerCount, setWorkerCount] = useState(0);
-  const [workerHours, setWorkerHours] = useState(1);
+  const [loadingTons, setLoadingTons] = useState(1);
   const [carCount, setCarCount] = useState(1);
   const [confirmedInvoice, setConfirmedInvoice] = useState(null);
 
@@ -75,12 +78,13 @@ export default function Calculator() {
   );
   const equipmentTotal = equipmentRows.reduce((s, r) => s + r.total, 0);
 
-  const workersTotal = Number(workerCount || 0) * Number(workerHours || 0) * WORKER_PRICE_PER_CAR;
+  // سعر التحميل: عدد الأطنان × 30ج (لا يعتمد على عدد العمال)
+  const loadingTotal = Number(loadingTons || 0) * LOADING_PRICE_PER_TON;
 
   const maintenanceFee = SITE_MAINTENANCE_FEE[location];
   const maintenanceTotal = Number(carCount || 0) * maintenanceFee;
 
-  const grandTotal = scrapTotal + equipmentTotal + workersTotal + maintenanceTotal;
+  const grandTotal = scrapTotal + equipmentTotal + loadingTotal + maintenanceTotal;
   const canConfirm = canReserveRole(role);
 
   function handleConfirm() {
@@ -89,7 +93,7 @@ export default function Calculator() {
       return;
     }
     if (!canConfirm) {
-      promptVerification("لا يمكنك الحجز بدون توثيق حسابك كتاجر أولاً. تواصل مع إدارة الموقع للتوثيق.");
+      promptVerification("لإتمام الحجز، لازم توثق حسابك أولاً.");
       return;
     }
     setConfirmedInvoice({
@@ -100,8 +104,9 @@ export default function Calculator() {
       scrapRows: scrapRows.filter((r) => r.tons > 0),
       equipmentRows,
       workerCount,
-      workerHours,
-      workersTotal,
+      loadingTons: Number(loadingTons || 0),
+      loadingPricePerTon: LOADING_PRICE_PER_TON,
+      loadingTotal,
       carCount,
       maintenanceFee,
       maintenanceTotal,
@@ -208,16 +213,17 @@ export default function Calculator() {
         </div>
 
         <div className="calc-row">
-          <span className="label">عدد ساعات العمال</span>
+          <span className="label">التحميل بالطن</span>
           <input
             className="calc-input"
             type="number"
             min="0"
-            value={workerHours}
-            onChange={(e) => setWorkerHours(e.target.value)}
+            value={loadingTons || ""}
+            onChange={(e) => setLoadingTons(e.target.value)}
+            placeholder="0"
           />
-          <span className="unit">ساعة</span>
-          <span className="rp">{fmt(workersTotal)}</span>
+          <span className="unit">طن</span>
+          <span className="rp">{fmt(loadingTotal)}</span>
         </div>
 
         <div className="calc-row">
@@ -233,13 +239,15 @@ export default function Calculator() {
           <span className="rp">{fmt(maintenanceTotal)}</span>
         </div>
 
-        <p className="calc-note">سعر صيانة السيارة الواحدة: {fmt(maintenanceFee)}</p>
+        <p className="calc-note">
+          سعر تحميل الطن: {fmt(LOADING_PRICE_PER_TON)} · سعر صيانة السيارة: {fmt(maintenanceFee)}
+        </p>
       </Section>
 
       <Section title="الفاتورة الإجمالية">
         <Line label="أصناف الخردة" value={scrapTotal} />
         <Line label="إيجار المعدات" value={equipmentTotal} />
-        <Line label="أجور العمال" value={workersTotal} />
+        <Line label="أجور التحميل" value={loadingTotal} />
         <Line label="صيانة الرصيف" value={maintenanceTotal} />
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
           <span style={{ fontSize: 15, color: "var(--steel)" }}>الإجمالي</span>
@@ -247,14 +255,28 @@ export default function Calculator() {
         </div>
 
         {user && !canConfirm && (
-          <p style={{ fontSize: 12, color: "var(--danger)", marginTop: 10 }}>
-            حسابك غير موثق، لا يمكنك تأكيد الحجز حاليًا.
+          <p style={{ fontSize: 12.5, color: "var(--danger)", marginTop: 10, lineHeight: 1.7 }}>
+            حسابك غير موثق حاليًا، لذلك لا يمكنك تأكيد الحجز. أرسل طلب توثيق وستتمكن من التأكيد بعد الموافقة.
           </p>
         )}
 
-        <button className="btn btn-primary" style={{ width: "100%", marginTop: 14 }} onClick={handleConfirm}>
-          {user ? "تأكيد الحجز وعرض الفاتورة" : "سجّل دخولك لتأكيد الحجز"}
-        </button>
+        {user && !canConfirm ? (
+          <button
+            className="btn"
+            style={{ width: "100%", marginTop: 14, borderColor: "var(--kabbash)", color: "var(--kabbash)" }}
+            onClick={() => promptVerification("لإتمام الحجز، لازم توثق حسابك أولاً.")}
+          >
+            أرسل طلب توثيق
+          </button>
+        ) : (
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%", marginTop: 14 }}
+            onClick={handleConfirm}
+          >
+            {user ? "تأكيد الحجز وعرض الفاتورة" : "سجّل دخولك لتأكيد الحجز"}
+          </button>
+        )}
       </Section>
 
       <style>{`
@@ -389,13 +411,16 @@ function InvoiceView({ invoice, onBack }) {
           </InvoiceGroup>
         )}
 
-        {(invoice.equipmentRows.length > 0 || invoice.workerCount > 0) && (
+        {(invoice.equipmentRows.length > 0 || invoice.loadingTotal > 0) && (
           <InvoiceGroup title="الرسوم الإيجارية للمعدات والعمالة">
             {invoice.equipmentRows.map((r, i) => (
               <InvoiceLine key={i} label={`${r.name} - ${r.hours} ساعة`} value={r.total} />
             ))}
-            {invoice.workerCount > 0 && (
-              <InvoiceLine label={`عمال (${invoice.workerCount}) - ${invoice.workerHours} ساعة`} value={invoice.workersTotal} />
+            {invoice.loadingTotal > 0 && (
+              <InvoiceLine
+                label={`تحميل ${invoice.loadingTons} طن × ${fmt(invoice.loadingPricePerTon)}${invoice.workerCount > 0 ? ` (${invoice.workerCount} عامل)` : ""}`}
+                value={invoice.loadingTotal}
+              />
             )}
           </InvoiceGroup>
         )}
