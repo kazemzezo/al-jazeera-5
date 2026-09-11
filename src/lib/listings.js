@@ -18,7 +18,6 @@ import { EQUIPMENT } from "./equipment";
 import { revertAdReservation } from "./ads";
 
 /* ===================== ثوابت ===================== */
-// عدد الأيام اللي بعدها السعر يعتبر "ثابت"
 export const PRICE_STABLE_DAYS = 5;
 
 /* ===================== الأسعار ===================== */
@@ -30,33 +29,29 @@ export function subscribeTonPrices(callback) {
   });
 }
 
-// ✅ محدّث: يقارن بالسعر القديم ويحدد الاتجاه
+// ✅ محدّث: يستخدم Date.now() بدل serverTimestamp() لتفادي مشكلة "Pending"
 export async function setTonPrice(category, pricePerTon, uid) {
   const newPrice = Number(pricePerTon);
   const priceRef = doc(db, "prices", category);
 
-  // اقرأ السعر الحالي
   const snap = await getDoc(priceRef);
   const oldData = snap.exists() ? snap.data() : null;
   const oldPrice = Number(oldData?.pricePerTon ?? 0);
 
-  // احسب الاتجاه
-  let direction = oldData?.direction || "stable";
-  let changedAt = oldData?.changedAt || serverTimestamp();
+  // الاتجاه الافتراضي
+  let direction = "stable";
+  let changedAt = Date.now(); // دايماً رقم، مفيش pending
 
-  if (oldData) {
+  if (oldData && oldPrice > 0) {
     if (newPrice > oldPrice) {
       direction = "up";
-      changedAt = serverTimestamp();
     } else if (newPrice < oldPrice) {
       direction = "down";
-      changedAt = serverTimestamp();
+    } else {
+      // نفس السعر: نحافظ على الاتجاه والوقت السابق
+      direction = oldData.direction || "stable";
+      changedAt = oldData.changedAt || Date.now();
     }
-    // لو نفس السعر: نسيب direction و changedAt زي ما هما
-  } else {
-    // أول مرة يتسجل السعر
-    direction = "stable";
-    changedAt = serverTimestamp();
   }
 
   await setDoc(priceRef, {
@@ -64,7 +59,7 @@ export async function setTonPrice(category, pricePerTon, uid) {
     pricePerTon: newPrice,
     previousPrice: oldPrice,
     direction,
-    changedAt,
+    changedAt, // ← رقم (milliseconds) مش serverTimestamp
     updatedAt: serverTimestamp(),
     updatedBy: uid,
   });
@@ -72,16 +67,26 @@ export async function setTonPrice(category, pricePerTon, uid) {
 
 // ✅ helper: هل السعر ثابت لـ X أيام؟
 export function isPriceStableFor(priceData, days = PRICE_STABLE_DAYS) {
-  if (!priceData?.changedAt) return true;
-  const changedMs = priceData.changedAt?.toMillis?.();
+  if (!priceData) return false;
+  // لو changedAt لسه مش موجود خالص
+  if (!priceData.changedAt) {
+    // لو الاتجاه واضح (up/down)، نرجع false عشان السهم يظهر
+    if (priceData.direction && priceData.direction !== "stable") {
+      return false;
+    }
+    return true;
+  }
+  // ندعم الاتنين: رقم (Date.now) أو Timestamp قديم
+  const changedMs =
+    typeof priceData.changedAt === "number"
+      ? priceData.changedAt
+      : priceData.changedAt?.toMillis?.() || 0;
   if (!changedMs) return false;
   const diffDays = (Date.now() - changedMs) / (1000 * 60 * 60 * 24);
   return diffDays >= days;
 }
 
 // ✅ helper: اتجاه السعر النهائي للعرض
-// لو ثابت لـ 5 أيام → "stable"
-// غير كده → "up" أو "down" زي ما هو محفوظ
 export function getPriceDirection(priceData) {
   if (!priceData) return "stable";
   if (isPriceStableFor(priceData)) return "stable";
