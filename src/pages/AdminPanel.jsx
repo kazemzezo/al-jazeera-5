@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { TON_CATEGORIES } from "../lib/catalog";
+import { TON_CATEGORIES, LOCATIONS } from "../lib/catalog";
 import { EQUIPMENT } from "../lib/equipment";
 import { DEMO_TON_PRICES } from "../lib/demoData";
 import {
@@ -8,6 +8,10 @@ import {
   setTonPrice,
   subscribeEquipmentPrices,
   setEquipmentPrice,
+  subscribeAllReservations,
+  updateReservationStatus,
+  subscribeAnnouncements,
+  deleteAnnouncement,
 } from "../lib/listings";
 import {
   subscribeAllVerifications,
@@ -15,25 +19,51 @@ import {
   rejectVerification,
 } from "../lib/verification";
 import { subscribeMessages, markMessageRead } from "../lib/messages";
+import InvoiceView from "../components/InvoiceView";
 
 export default function AdminPanel() {
   const { user } = useAuth();
-  const [tab, setTab] = useState("prices");
+  const [tab, setTab] = useState("reservations");
+  const [newCount, setNewCount] = useState(0);
+
+  // نحسب عدد الحجوزات الجديدة لعرض badge على التاب
+  useEffect(() => {
+    const unsub = subscribeAllReservations((items) => {
+      setNewCount(items.filter((r) => r.status === "new").length);
+    });
+    return () => unsub();
+  }, []);
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 16 }}>لوحة الإدمن</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 16 }}>لوحة الإدمن</h1>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        <Pill active={tab === "prices"} onClick={() => setTab("prices")}>الأسعار</Pill>
-        <Pill active={tab === "equipment"} onClick={() => setTab("equipment")}>المعدات</Pill>
-        <Pill active={tab === "verification"} onClick={() => setTab("verification")}>طلبات التوثيق</Pill>
-        <Pill active={tab === "messages"} onClick={() => setTab("messages")}>رسائل التواصل</Pill>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <Pill active={tab === "reservations"} onClick={() => setTab("reservations")}>
+          الحجوزات {newCount > 0 && <Badge>{newCount}</Badge>}
+        </Pill>
+        <Pill active={tab === "verification"} onClick={() => setTab("verification")}>
+          طلبات التوثيق
+        </Pill>
+        <Pill active={tab === "announcements"} onClick={() => setTab("announcements")}>
+          الإعلانات
+        </Pill>
+        <Pill active={tab === "prices"} onClick={() => setTab("prices")}>
+          الأسعار
+        </Pill>
+        <Pill active={tab === "equipment"} onClick={() => setTab("equipment")}>
+          المعدات
+        </Pill>
+        <Pill active={tab === "messages"} onClick={() => setTab("messages")}>
+          رسائل التواصل
+        </Pill>
       </div>
 
+      {tab === "reservations" && <ReservationsTab uid={user.uid} />}
+      {tab === "verification" && <VerificationTab />}
+      {tab === "announcements" && <AnnouncementsTab />}
       {tab === "prices" && <PricesTab uid={user.uid} />}
       {tab === "equipment" && <EquipmentTab uid={user.uid} />}
-      {tab === "verification" && <VerificationTab />}
       {tab === "messages" && <MessagesTab />}
 
       <style>{`
@@ -43,6 +73,433 @@ export default function AdminPanel() {
     </div>
   );
 }
+
+/* ===================== الحجوزات ===================== */
+
+const STATUS_LABELS = {
+  new: "🟡 جديد",
+  contacted: "🔵 تم التواصل",
+  completed: "🟢 مكتمل",
+  cancelled: "🔴 ملغي",
+};
+
+function statusBadgeStyle(status) {
+  const base = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "3px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+  };
+  if (status === "new")
+    return { ...base, background: "var(--crane-light)", color: "var(--crane)" };
+  if (status === "contacted")
+    return { ...base, background: "var(--kabbash-light)", color: "var(--steel)" };
+  if (status === "completed")
+    return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+  if (status === "cancelled")
+    return { ...base, background: "var(--danger-light)", color: "var(--danger)" };
+  return base;
+}
+
+function ReservationsTab({ uid }) {
+  const [filter, setFilter] = useState("new");
+  const [search, setSearch] = useState("");
+  const [all, setAll] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+  const [viewing, setViewing] = useState(null);
+  const [cancelingId, setCancelingId] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const unsub = subscribeAllReservations(
+      setAll,
+      (err) => {
+        console.error(err);
+        setError("تعذر تحميل الحجوزات. جرب تحديث الصفحة.");
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  const filtered = useMemo(() => {
+    let list = all;
+    if (filter !== "all") list = list.filter((r) => r.status === filter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (r) =>
+          (r.traderName || "").toLowerCase().includes(q) ||
+          (r.traderEmail || "").toLowerCase().includes(q) ||
+          (r.category || "").toLowerCase().includes(q) ||
+          (r.invoiceId || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [all, filter, search]);
+
+  const counts = useMemo(
+    () => ({
+      new: all.filter((r) => r.status === "new").length,
+      contacted: all.filter((r) => r.status === "contacted").length,
+      completed: all.filter((r) => r.status === "completed").length,
+      cancelled: all.filter((r) => r.status === "cancelled").length,
+      all: all.length,
+    }),
+    [all]
+  );
+
+  async function setStatus(id, status) {
+    setBusyId(id);
+    try {
+      await updateReservationStatus(id, status, { uid });
+    } catch (err) {
+      console.error(err);
+      setError("تعذر تحديث حالة الحجز.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function confirmCancel(id) {
+    setBusyId(id);
+    try {
+      await updateReservationStatus(id, "cancelled", {
+        uid,
+        reason: cancelReason.trim(),
+      });
+      setCancelingId(null);
+      setCancelReason("");
+    } catch (err) {
+      console.error(err);
+      setError("تعذر إلغاء الحجز.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (viewing) {
+    return (
+      <InvoiceView
+        invoice={viewing}
+        onBack={() => setViewing(null)}
+        adminActions={<InvoiceAdminActions invoice={viewing} uid={uid} onBack={() => setViewing(null)} onStatusChange={(s) => setStatus(viewing.id, s)} />}
+      />
+    );
+  }
+
+  return (
+    <div>
+      {error && (
+        <p style={{ fontSize: 13, color: "var(--danger)", marginBottom: 10 }}>{error}</p>
+      )}
+
+      {/* بحث */}
+      <input
+        className="input"
+        placeholder="ابحث باسم التاجر أو الإيميل أو الصنف أو رقم الفاتورة..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ marginBottom: 12 }}
+      />
+
+      {/* فلاتر الحالة */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        {["new", "contacted", "completed", "cancelled", "all"].map((s) => (
+          <button
+            key={s}
+            className="btn"
+            style={{
+              fontSize: 12,
+              padding: "5px 12px",
+              background: filter === s ? "var(--ink)" : "transparent",
+              color: filter === s ? "var(--paper)" : "var(--ink)",
+              borderColor: filter === s ? "var(--ink)" : "var(--line)",
+            }}
+            onClick={() => setFilter(s)}
+          >
+            {s === "all" ? "الكل" : STATUS_LABELS[s]} ({counts[s]})
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--steel)" }}>لا توجد حجوزات في هذه الحالة.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filtered.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                background: "var(--paper-raised)",
+                border: "1px solid var(--line)",
+                borderRadius: "var(--radius)",
+                padding: 14,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                <div style={{ minWidth: 200 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={statusBadgeStyle(r.status)}>
+                      {STATUS_LABELS[r.status] || r.status}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--steel-light)" }}>
+                      {r.type === "calculator" ? "من الحاسبة" : "من الرئيسية"}
+                    </span>
+                  </div>
+                  <p style={{ margin: "8px 0 2px", fontWeight: 700, fontSize: 14 }}>
+                    {r.traderName || r.traderEmail || "—"}
+                  </p>
+                  {r.traderEmail && (
+                    <p style={{ margin: 0, fontSize: 12, color: "var(--steel)" }}>
+                      {r.traderEmail}
+                    </p>
+                  )}
+                  <p style={{ margin: "4px 0 0", fontSize: 12.5 }}>
+                    {r.type === "calculator" ? (
+                      <>
+                        فاتورة من الحاسبة · {r.location === LOCATIONS.DOCK ? "الرصيف" : "الساحة"}
+                      </>
+                    ) : (
+                      <>
+                        {r.category} · {r.qty} {r.saleType === "lot" ? "لوط" : r.saleType === "piece" ? "قطعة" : "طن"}
+                      </>
+                    )}
+                  </p>
+                  {r.invoiceId && (
+                    <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--steel-light)" }}>
+                      رقم: {r.invoiceId}
+                    </p>
+                  )}
+                  {r.status === "cancelled" && r.cancelReason && (
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--danger)" }}>
+                      <b>سبب الإلغاء:</b> {r.cancelReason}
+                    </p>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                  <span style={{ fontSize: 18, fontWeight: 900 }}>
+                    {Number(r.grandTotal || 0).toLocaleString("ar-EG")}ج
+                  </span>
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button
+                      className="btn"
+                      style={{ fontSize: 12, padding: "5px 12px" }}
+                      onClick={() => setViewing(r)}
+                    >
+                      عرض الفاتورة
+                    </button>
+
+                    {r.status === "new" && (
+                      <button
+                        className="btn"
+                        style={{ fontSize: 12, padding: "5px 12px" }}
+                        onClick={() => setStatus(r.id, "contacted")}
+                        disabled={busyId === r.id}
+                      >
+                        تم التواصل
+                      </button>
+                    )}
+
+                    {(r.status === "new" || r.status === "contacted") && (
+                      <button
+                        className="btn btn-primary"
+                        style={{ fontSize: 12, padding: "5px 12px" }}
+                        onClick={() => setStatus(r.id, "completed")}
+                        disabled={busyId === r.id}
+                      >
+                        إتمام
+                      </button>
+                    )}
+
+                    {r.status !== "cancelled" && r.status !== "completed" && (
+                      <button
+                        className="btn"
+                        style={{
+                          fontSize: 12,
+                          padding: "5px 12px",
+                          color: "var(--danger)",
+                          borderColor: "var(--danger)",
+                        }}
+                        onClick={() => {
+                          setCancelingId(r.id);
+                          setCancelReason("");
+                        }}
+                        disabled={busyId === r.id}
+                      >
+                        إلغاء
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {cancelingId === r.id && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
+                  <input
+                    className="input"
+                    placeholder="سبب الإلغاء (اختياري)"
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn"
+                      style={{
+                        background: "var(--danger)",
+                        borderColor: "var(--danger)",
+                        color: "#fff",
+                        fontSize: 13,
+                      }}
+                      onClick={() => confirmCancel(r.id)}
+                      disabled={busyId === r.id}
+                    >
+                      تأكيد الإلغاء (سيرجع للمخزون)
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ fontSize: 13 }}
+                      onClick={() => {
+                        setCancelingId(null);
+                        setCancelReason("");
+                      }}
+                    >
+                      تراجع
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InvoiceAdminActions({ invoice, uid, onBack, onStatusChange }) {
+  return (
+    <>
+      {invoice.status === "new" && (
+        <button
+          className="btn"
+          onClick={async () => {
+            await onStatusChange("contacted");
+            onBack();
+          }}
+        >
+          تحديد كـ "تم التواصل"
+        </button>
+      )}
+      {(invoice.status === "new" || invoice.status === "contacted") && (
+        <button
+          className="btn btn-primary"
+          onClick={async () => {
+            await onStatusChange("completed");
+            onBack();
+          }}
+        >
+          تحديد كـ "مكتمل"
+        </button>
+      )}
+    </>
+  );
+}
+
+/* ===================== الإعلانات ===================== */
+
+function AnnouncementsTab() {
+  const [dock, setDock] = useState([]);
+  const [yard, setYard] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => {
+    const unsub1 = subscribeAnnouncements(LOCATIONS.DOCK, setDock);
+    const unsub2 = subscribeAnnouncements(LOCATIONS.YARD, setYard);
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, []);
+
+  async function handleDelete(id) {
+    if (!window.confirm("تأكيد حذف الإعلان؟")) return;
+    setBusyId(id);
+    try {
+      await deleteAnnouncement(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function Section({ title, items }) {
+    if (items.length === 0) {
+      return (
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>{title}</h3>
+          <p style={{ fontSize: 13, color: "var(--steel)" }}>لا توجد إعلانات.</p>
+        </div>
+      );
+    }
+    return (
+      <div style={{ marginBottom: 24 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>{title}</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map((a) => (
+            <div
+              key={a.id}
+              style={{
+                background: "var(--paper-raised)",
+                border: "1px solid var(--line)",
+                borderRadius: "var(--radius)",
+                padding: "10px 14px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <p style={{ margin: 0, fontSize: 13.5 }}>{a.text}</p>
+                <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--steel-light)" }}>
+                  {a.createdByName} ·{" "}
+                  {a.createdAt?.toDate?.().toLocaleString("ar-EG") || "—"}
+                </p>
+              </div>
+              <button
+                className="btn"
+                style={{ fontSize: 12, padding: "4px 10px", color: "var(--danger)", borderColor: "var(--danger)" }}
+                onClick={() => handleDelete(a.id)}
+                disabled={busyId === a.id}
+              >
+                حذف
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: "var(--steel)", marginBottom: 16 }}>
+        الإعلانات بتتضاف من الصفحة الرئيسية (زر "+ إضافة صنف / إعلان"). تقدر تحذف أي إعلان من هنا.
+      </p>
+      <Section title="الرصيف البحري" items={dock} />
+      <Section title="ساحة الجزيره" items={yard} />
+    </div>
+  );
+}
+
+/* ===================== الأسعار ===================== */
 
 function PricesTab({ uid }) {
   const [prices, setPrices] = useState({});
@@ -91,6 +548,8 @@ function PricesTab({ uid }) {
   );
 }
 
+/* ===================== المعدات ===================== */
+
 function EquipmentTab({ uid }) {
   const [prices, setPrices] = useState({});
   const [values, setValues] = useState({});
@@ -137,6 +596,8 @@ function EquipmentTab({ uid }) {
   );
 }
 
+/* ===================== التوثيق ===================== */
+
 function VerificationTab() {
   const [filter, setFilter] = useState("pending");
   const [allRequests, setAllRequests] = useState([]);
@@ -181,13 +642,7 @@ function VerificationTab() {
     }
   }
 
-  const labels = {
-    pending: "معلق",
-    approved: "مقبول",
-    rejected: "مرفوض",
-    all: "الكل",
-  };
-
+  const labels = { pending: "معلق", approved: "مقبول", rejected: "مرفوض", all: "الكل" };
   const counts = {
     pending: allRequests.filter((r) => r.status === "pending").length,
     approved: allRequests.filter((r) => r.status === "approved").length,
@@ -340,6 +795,8 @@ function VerificationTab() {
   );
 }
 
+/* ===================== الرسائل ===================== */
+
 function MessagesTab() {
   const [messages, setMessages] = useState([]);
 
@@ -372,20 +829,44 @@ function MessagesTab() {
   );
 }
 
+/* ===================== مكونات مساعدة ===================== */
+
 function Pill({ active, onClick, children }) {
   return (
     <button
       className="btn"
       style={{
-        fontSize: 12,
-        padding: "6px 14px",
+        fontSize: 12.5,
+        padding: "7px 14px",
         background: active ? "var(--kabbash)" : "transparent",
         color: active ? "#fff" : "var(--ink)",
         borderColor: active ? "var(--kabbash)" : "var(--line)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
       }}
       onClick={onClick}
     >
       {children}
     </button>
+  );
+}
+
+function Badge({ children }) {
+  return (
+    <span
+      style={{
+        background: "#fff",
+        color: "var(--danger)",
+        borderRadius: 999,
+        padding: "1px 7px",
+        fontSize: 11,
+        fontWeight: 900,
+        minWidth: 18,
+        textAlign: "center",
+      }}
+    >
+      {children}
+    </span>
   );
 }
