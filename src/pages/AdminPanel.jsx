@@ -14,6 +14,7 @@ import {
   approveVerification,
   rejectVerification,
 } from "../lib/verification";
+import { subscribeMessages, markMessageRead } from "../lib/messages";
 
 export default function AdminPanel() {
   const { user } = useAuth();
@@ -27,11 +28,13 @@ export default function AdminPanel() {
         <Pill active={tab === "prices"} onClick={() => setTab("prices")}>الأسعار</Pill>
         <Pill active={tab === "equipment"} onClick={() => setTab("equipment")}>المعدات</Pill>
         <Pill active={tab === "verification"} onClick={() => setTab("verification")}>طلبات التوثيق</Pill>
+        <Pill active={tab === "messages"} onClick={() => setTab("messages")}>رسائل التواصل</Pill>
       </div>
 
       {tab === "prices" && <PricesTab uid={user.uid} />}
       {tab === "equipment" && <EquipmentTab uid={user.uid} />}
       {tab === "verification" && <VerificationTab />}
+      {tab === "messages" && <MessagesTab />}
 
       <style>{`
         .admin-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
@@ -181,6 +184,38 @@ function VerificationTab() {
               رفض
             </button>
           </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessagesTab() {
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    const unsub = subscribeMessages(setMessages);
+    return () => unsub();
+  }, []);
+
+  if (messages.length === 0) {
+    return <p style={{ fontSize: 13, color: "var(--steel)" }}>لا توجد رسائل حتى الآن.</p>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {messages.map((m) => (
+        <div
+          key={m.id}
+          style={{ background: "var(--paper-raised)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 14 }}
+          onClick={() => !m.read && markMessageRead(m.id)}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{m.name || "بدون اسم"}</p>
+            {!m.read && <span style={{ fontSize: 11, color: "var(--kabbash)", fontWeight: 700 }}>جديدة</span>}
+          </div>
+          <p style={{ margin: "0 0 6px", fontSize: 12, color: "var(--steel)" }}>{m.email}</p>
+          <p style={{ margin: 0, fontSize: 13 }}>{m.text}</p>
         </div>
       ))}
     </div>
