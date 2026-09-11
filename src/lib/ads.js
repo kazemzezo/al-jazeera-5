@@ -1,0 +1,237 @@
+// ============================================
+// نظام الإعلانات (الرصيف البحري)
+// ============================================
+
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from "firebase/firestore";
+import { db } from "./firebase";
+
+// حالات الإعلان
+export const AD_STATUS = {
+  ACTIVE: "active",        // متاح
+  PARTIAL: "partial",      // بعض الأصناف خلصت
+  SOLD_OUT: "sold_out",    // كل الأصناف خلصت
+  CLOSED: "closed",        // تم الغلق من الإدارة
+};
+
+export const AD_STATUS_LABELS = {
+  [AD_STATUS.ACTIVE]: "متاح",
+  [AD_STATUS.PARTIAL]: "متاح جزئياً",
+  [AD_STATUS.SOLD_OUT]: "تم البيع",
+  [AD_STATUS.CLOSED]: "تم الغلق من الإدارة",
+};
+
+// ============ قراءة ============
+
+// كل الإعلانات (للأدمن)
+export function subscribeAllAds(callback, onError) {
+  return onSnapshot(
+    collection(db, "ads"),
+    (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      items.sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+      callback(items);
+    },
+    onError
+  );
+}
+
+// إعلانات قسم معين (dock / yard)
+export function subscribeAds(location, callback, onError) {
+  return onSnapshot(
+    collection(db, "ads"),
+    (snap) => {
+      const items = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((a) => a.location === location)
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() || 0;
+          const tb = b.createdAt?.toMillis?.() || 0;
+          return tb - ta;
+        });
+      callback(items);
+    },
+    onError
+  );
+}
+
+// كل الإعلانات المتاحة بس (للعرض في الرئيسية)
+export function subscribeActiveAds(callback, onError) {
+  return onSnapshot(
+    collection(db, "ads"),
+    (snap) => {
+      const items = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter(
+          (a) =>
+            a.status === AD_STATUS.ACTIVE ||
+            a.status === AD_STATUS.PARTIAL
+        )
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() || 0;
+          const tb = b.createdAt?.toMillis?.() || 0;
+          return tb - ta;
+        });
+      callback(items);
+    },
+    onError
+  );
+}
+
+// إعلان واحد بالتفصيل
+export function subscribeAd(id, callback, onError) {
+  if (!id) {
+    callback(null);
+    return () => {};
+  }
+  return onSnapshot(
+    doc(db, "ads", id),
+    (snap) => {
+      if (snap.exists()) callback({ id: snap.id, ...snap.data() });
+      else callback(null);
+    },
+    onError
+  );
+}
+
+// ============ كتابة ============
+
+// إنشاء إعلان جديد
+export async function createAd(ad, user) {
+  const items = (ad.items || []).map((it) => ({
+    category: it.category,
+    qty: Number(it.qty || 0),
+    unitPrice: Number(it.unitPrice || 0),
+    reservedQty: 0,
+  }));
+
+  const ref = await addDoc(collection(db, "ads"), {
+    title: ad.title?.trim() || "",
+    description: ad.description?.trim() || "",
+    imageUrl: ad.imageUrl?.trim() || "",
+    location: ad.location, // dock / yard
+    items,
+    status: AD_STATUS.ACTIVE,
+    createdBy: user.uid,
+    createdByName: user.displayName || user.email,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+// تعديل إعلان (مثلاً: العنوان، الوصف، الصورة)
+export async function updateAd(id, updates, uid) {
+  await updateDoc(doc(db, "ads", id), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+    updatedBy: uid,
+  });
+}
+
+// حساب الحالة الجديدة بعد الحجز
+export function computeAdStatus(items) {
+  if (!items || items.length === 0) return AD_STATUS.SOLD_OUT;
+  const allSoldOut = items.every(
+    (it) => Number(it.reservedQty || 0) >= Number(it.qty || 0)
+  );
+  if (allSoldOut) return AD_STATUS.SOLD_OUT;
+  const anyReserved = items.some((it) => Number(it.reservedQty || 0) > 0);
+  return anyReserved ? AD_STATUS.PARTIAL : AD_STATUS.ACTIVE;
+}
+
+// تحديث كمية محجوزة في إعلان (يُستخدم عند الموافقة على حجز)
+export async function applyReservationToAd(adId, reservedItems) {
+  // reservedItems: [{ category, qty }]
+  const adRef = doc(db, "ads", adId);
+  const snap = await getDoc(adRef);
+  if (!snap.exists()) throw new Error("الإعلان غير موجود");
+  const data = snap.data();
+  const items = (data.items || []).map((it) => {
+    const r = reservedItems.find((x) => x.category === it.category);
+    if (!r) return it;
+    return {
+      ...it,
+      reservedQty: Number(it.reservedQty || 0) + Number(r.qty || 0),
+    };
+  });
+  const newStatus = computeAdStatus(items);
+  await updateDoc(adRef, {
+    items,
+    status: newStatus,
+    updatedAt: serverTimestamp(),
+  });
+  return newStatus;
+}
+
+// غلق إعلان يدوياً (من الأدمن)
+export async function closeAd(id, uid) {
+  await updateDoc(doc(db, "ads", id), {
+    status: AD_STATUS.CLOSED,
+    updatedAt: serverTimestamp(),
+    updatedBy: uid,
+  });
+}
+
+// إعادة فتح إعلان مغلق (من الأدمن)
+export async function reopenAd(id, uid) {
+  const adRef = doc(db, "ads", id);
+  const snap = await getDoc(adRef);
+  if (!snap.exists()) throw new Error("الإعلان غير موجود");
+  const data = snap.data();
+  const newStatus = computeAdStatus(data.items);
+  await updateDoc(adRef, {
+    status: newStatus,
+    updatedAt: serverTimestamp(),
+    updatedBy: uid,
+  });
+}
+
+// حذف إعلان (من الأدمن) — نهائي
+export async function deleteAd(id) {
+  await deleteDoc(doc(db, "ads", id));
+}
+
+// ============ مساعدات ============
+
+// إجمالي قيمة الإعلان
+export function getAdTotal(ad) {
+  if (!ad?.items) return 0;
+  return ad.items.reduce(
+    (sum, it) => sum + Number(it.qty || 0) * Number(it.unitPrice || 0),
+    0
+  );
+}
+
+// هل الإعلان قابل للحجز؟
+export function isAdReservable(ad) {
+  if (!ad) return false;
+  return (
+    ad.status === AD_STATUS.ACTIVE || ad.status === AD_STATUS.PARTIAL
+  );
+}
+
+// الأصناف المتاحة للحجز
+export function getAvailableItems(ad) {
+  if (!ad?.items) return [];
+  return ad.items
+    .map((it) => ({
+      ...it,
+      available: Number(it.qty || 0) - Number(it.reservedQty || 0),
+    }))
+    .filter((it) => it.available > 0);
+}
