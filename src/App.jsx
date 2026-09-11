@@ -6,7 +6,9 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
-import Calculator from "./pages/Calculator";
+import Dock from "./pages/Dock";
+import Yard from "./pages/Yard";
+import AdDetails from "./pages/AdDetails";
 import AdminPanel from "./pages/AdminPanel";
 import SupervisorPanel from "./pages/SupervisorPanel";
 import DriverPanel from "./pages/DriverPanel";
@@ -25,7 +27,9 @@ export default function App() {
 
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Home />} />
-                <Route path="/calculator" element={<Calculator />} />
+                <Route path="/dock" element={<Dock />} />
+                <Route path="/yard" element={<Yard />} />
+                <Route path="/ads/:id" element={<AdDetails />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/guide" element={<Guide />} />
