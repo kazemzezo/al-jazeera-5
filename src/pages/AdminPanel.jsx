@@ -129,6 +129,7 @@ function AdsTab({ uid }) {
   const [locationFilter, setLocationFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [editingAd, setEditingAd] = useState(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
@@ -442,6 +443,20 @@ function AdsTab({ uid }) {
                   >
                     <button
                       className="btn"
+                      style={{
+                        fontSize: 12,
+                        padding: "5px 10px",
+                        color: "var(--kabbash)",
+                        borderColor: "var(--kabbash)",
+                      }}
+                      onClick={() => setEditingAd(ad)}
+                      disabled={busyId === ad.id}
+                    >
+                      ✏️ تعديل
+                    </button>
+
+                    <button
+                      className="btn"
                       style={{ fontSize: 12, padding: "5px 10px" }}
                       onClick={() =>
                         setExpandedId(isExpanded ? null : ad.id)
@@ -562,6 +577,12 @@ function AdsTab({ uid }) {
       )}
 
       {showForm && <AddAdForm onClose={() => setShowForm(false)} />}
+      {editingAd && (
+        <AddAdForm
+          ad={editingAd}
+          onClose={() => setEditingAd(null)}
+        />
+      )}
     </div>
   );
 }
@@ -628,6 +649,7 @@ function ReservationsTab({ uid }) {
           (r.traderName || "").toLowerCase().includes(q) ||
           (r.traderEmail || "").toLowerCase().includes(q) ||
           (r.category || "").toLowerCase().includes(q) ||
+          (r.adTitle || "").toLowerCase().includes(q) ||
           (r.invoiceId || "").toLowerCase().includes(q)
       );
     }
