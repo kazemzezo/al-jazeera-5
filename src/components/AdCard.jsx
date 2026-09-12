@@ -3,6 +3,7 @@ import { LOCATIONS, SALE_TYPES, SALE_TYPE_UNIT } from "../lib/catalog";
 import {
   AD_STATUS,
   AD_STATUS_LABELS,
+  AD_STATUS_COLORS,
   getAdTotal,
   getAvailableItems,
 } from "../lib/ads";
@@ -13,19 +14,18 @@ export default function AdCard({ ad }) {
   const total = getAdTotal(ad);
   const available = getAvailableItems(ad);
 
-  // نحسب المتاح مع وحداته
-  const availableByType = available.reduce(
-    (acc, it) => {
-      const type = it.saleType || SALE_TYPES.TON;
-      acc[type] = (acc[type] || 0) + Number(it.available || 0);
-      return acc;
-    },
-    {}
-  );
+  const availableByType = available.reduce((acc, it) => {
+    const type = it.saleType || SALE_TYPES.TON;
+    acc[type] = (acc[type] || 0) + Number(it.available || 0);
+    return acc;
+  }, {});
 
   const categories = (ad.items || []).map((it) => it.category).join(" · ");
-  const soldOut =
-    ad.status === AD_STATUS.SOLD_OUT || ad.status === AD_STATUS.CLOSED;
+
+  // حالات
+  const statusColors = AD_STATUS_COLORS[ad.status] || AD_STATUS_COLORS.active;
+  const isReservable = [AD_STATUS.ACTIVE, AD_STATUS.PARTIAL].includes(ad.status);
+  const isPulsing = [AD_STATUS.LOADING, AD_STATUS.INACTIVE].includes(ad.status);
 
   const locationLabel =
     ad.location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره";
@@ -55,14 +55,20 @@ export default function AdCard({ ad }) {
         ) : (
           <div className="ad-card-image-fallback">📦</div>
         )}
+
         <span className="ad-card-location">{locationLabel}</span>
-        {soldOut && (
-          <span className="ad-card-soldout">
-            {ad.status === AD_STATUS.SOLD_OUT
-              ? "تم البيع"
-              : AD_STATUS_LABELS[AD_STATUS.CLOSED]}
-          </span>
-        )}
+
+        {/* شارة الحالة */}
+        <span
+          className={"ad-card-status" + (isPulsing ? " pulse" : "")}
+          style={{
+            background: statusColors.bg,
+            boxShadow: `0 0 0 3px ${statusColors.light}`,
+          }}
+        >
+          <span className="ad-card-status-dot" />
+          {AD_STATUS_LABELS[ad.status] || ad.status}
+        </span>
       </div>
 
       <div className="ad-card-body">
@@ -70,18 +76,27 @@ export default function AdCard({ ad }) {
         {categories && <p className="ad-card-categories">{categories}</p>}
 
         <div className="ad-card-footer">
-          {!soldOut && Object.keys(availableByType).length > 0 && (
+          {isReservable && Object.keys(availableByType).length > 0 && (
             <span className="ad-card-available">
               {Object.entries(availableByType)
                 .map(
                   ([type, qty]) =>
-                    `${qty.toLocaleString("ar-EG")} ${SALE_TYPE_UNIT[type] || "طن"}`
+                    `${qty.toLocaleString("ar-EG")} ${
+                      SALE_TYPE_UNIT[type] || "طن"
+                    }`
                 )
                 .join(" · ")}{" "}
               متاح
             </span>
           )}
-          {soldOut && <span className="ad-card-soldout-text">غير متاح</span>}
+          {!isReservable && (
+            <span
+              className="ad-card-soldout-text"
+              style={{ color: statusColors.bg }}
+            >
+              {AD_STATUS_LABELS[ad.status]}
+            </span>
+          )}
           <span className="ad-card-price">
             {total.toLocaleString("ar-EG")}ج
           </span>
@@ -98,6 +113,7 @@ export default function AdCard({ ad }) {
           overflow: hidden;
           cursor: pointer;
           transition: transform .2s ease, box-shadow .2s ease;
+          position: relative;
         }
         .ad-card:hover {
           transform: translateY(-3px);
@@ -140,17 +156,38 @@ export default function AdCard({ ad }) {
           border-radius: 999px;
           font-weight: 600;
         }
-        .ad-card-soldout {
+        .ad-card-status {
           position: absolute;
-          inset: 0;
-          background: rgba(163, 52, 47, 0.75);
+          top: 8px;
+          inset-inline-end: 8px;
           color: #fff;
-          display: flex;
+          font-size: 11px;
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-weight: 700;
+          display: inline-flex;
           align-items: center;
-          justify-content: center;
-          font-size: 15px;
-          font-weight: 900;
-          letter-spacing: 1px;
+          gap: 5px;
+          transition: box-shadow .2s;
+        }
+        .ad-card-status-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #fff;
+        }
+        .ad-card-status.pulse {
+          animation: ad-card-pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes ad-card-pulse {
+          0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.75;
+            transform: scale(0.97);
+          }
         }
         .ad-card-body {
           padding: 10px 12px 12px;
@@ -180,7 +217,6 @@ export default function AdCard({ ad }) {
           font-weight: 700;
         }
         .ad-card-soldout-text {
-          color: var(--danger);
           font-weight: 700;
         }
         .ad-card-price {
