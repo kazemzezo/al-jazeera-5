@@ -1129,4 +1129,1230 @@ function ReservationsTab({ uid }) {
                       style={{
                         margin: "2px 0 0",
                         fontSize: 11,
-                       
+                        color: "var(--steel-light)",
+                      }}
+                    >
+                      رقم: {r.invoiceId}
+                    </p>
+                  )}
+                  {r.status === "cancelled" && r.cancelReason && (
+                    <p
+                      style={{
+                        margin: "6px 0 0",
+                        fontSize: 12,
+                        color: "var(--danger)",
+                      }}
+                    >
+                      <b>سبب الإلغاء:</b> {r.cancelReason}
+                    </p>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-end",
+                    gap: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 18, fontWeight: 900 }}>
+                    {Number(r.grandTotal || 0).toLocaleString("ar-EG")}ج
+                  </span>
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button
+                      className="btn"
+                      style={{ fontSize: 12, padding: "5px 12px" }}
+                      onClick={() => setViewing(r)}
+                    >
+                      عرض الفاتورة
+                    </button>
+
+                    {r.status === "new" && (
+                      <button
+                        className="btn"
+                        style={{ fontSize: 12, padding: "5px 12px" }}
+                        onClick={() => setStatus(r.id, "contacted")}
+                        disabled={busyId === r.id}
+                      >
+                        {busyId === r.id ? "..." : "تم التواصل"}
+                      </button>
+                    )}
+
+                    {(r.status === "new" || r.status === "contacted") && (
+                      <button
+                        className="btn"
+                        style={{ fontSize: 12, padding: "5px 12px" }}
+                        onClick={() => setStatus(r.id, "in_progress")}
+                        disabled={busyId === r.id}
+                      >
+                        {busyId === r.id ? "..." : "قيد التنفيذ"}
+                      </button>
+                    )}
+
+                    {(r.status === "new" ||
+                      r.status === "contacted" ||
+                      r.status === "in_progress") && (
+                      <button
+                        className="btn btn-primary"
+                        style={{ fontSize: 12, padding: "5px 12px" }}
+                        onClick={() => setStatus(r.id, "completed")}
+                        disabled={busyId === r.id}
+                      >
+                        {busyId === r.id ? "..." : "إتمام"}
+                      </button>
+                    )}
+
+                    {r.status !== "cancelled" && r.status !== "completed" && (
+                      <button
+                        className="btn"
+                        style={{
+                          fontSize: 12,
+                          padding: "5px 12px",
+                          color: "var(--danger)",
+                          borderColor: "var(--danger)",
+                        }}
+                        onClick={() => {
+                          setCancelingId(r.id);
+                          setCancelReason("");
+                        }}
+                        disabled={busyId === r.id}
+                      >
+                        إلغاء
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {cancelingId === r.id && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 12,
+                    borderTop: "1px dashed var(--line)",
+                  }}
+                >
+                  <input
+                    className="input"
+                    placeholder="سبب الإلغاء (اختياري)"
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn"
+                      style={{
+                        background: "var(--danger)",
+                        borderColor: "var(--danger)",
+                        color: "#fff",
+                        fontSize: 13,
+                      }}
+                      onClick={() => confirmCancel(r.id)}
+                      disabled={busyId === r.id}
+                    >
+                      {busyId === r.id ? "جاري الإلغاء..." : "تأكيد الإلغاء"}
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ fontSize: 13 }}
+                      onClick={() => {
+                        setCancelingId(null);
+                        setCancelReason("");
+                      }}
+                    >
+                      تراجع
+                    </button>
+                  </div>
+                  <p
+                    style={{
+                      fontSize: 11.5,
+                      color: "var(--steel)",
+                      margin: "8px 0 0",
+                    }}
+                  >
+                    ملاحظة: إلغاء الحجز سيرجّع الكمية للمخزون تلقائياً.
+                  </p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InvoiceAdminActions({ invoice, onBack, onStatusChange }) {
+  return (
+    <>
+      {invoice.status === "new" && (
+        <button
+          className="btn"
+          onClick={async () => {
+            await onStatusChange("contacted");
+            onBack();
+          }}
+        >
+          تحديد كـ "تم التواصل"
+        </button>
+      )}
+      {(invoice.status === "new" || invoice.status === "contacted") && (
+        <button
+          className="btn"
+          onClick={async () => {
+            await onStatusChange("in_progress");
+            onBack();
+          }}
+        >
+          تحديد كـ "قيد التنفيذ"
+        </button>
+      )}
+      {(invoice.status === "new" ||
+        invoice.status === "contacted" ||
+        invoice.status === "in_progress") && (
+        <button
+          className="btn btn-primary"
+          onClick={async () => {
+            await onStatusChange("completed");
+            onBack();
+          }}
+        >
+          تحديد كـ "مكتمل"
+        </button>
+      )}
+    </>
+  );
+}
+
+/* ===================== الإعلانات السريعة ===================== */
+
+function AnnouncementsTab() {
+  const [dock, setDock] = useState([]);
+  const [yard, setYard] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => {
+    const unsub1 = subscribeAnnouncements(LOCATIONS.DOCK, setDock);
+    const unsub2 = subscribeAnnouncements(LOCATIONS.YARD, setYard);
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, []);
+
+  async function handleDelete(id) {
+    if (!window.confirm("تأكيد حذف الإعلان؟")) return;
+    setBusyId(id);
+    try {
+      await deleteAnnouncement(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function Section({ title, items }) {
+    if (items.length === 0) {
+      return (
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>
+            {title}
+          </h3>
+          <p style={{ fontSize: 13, color: "var(--steel)" }}>
+            لا توجد إعلانات.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div style={{ marginBottom: 24 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>
+          {title}
+        </h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map((a) => (
+            <div
+              key={a.id}
+              style={{
+                background: "var(--paper-raised)",
+                border: "1px solid var(--line)",
+                borderRadius: "var(--radius)",
+                padding: "10px 14px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <p style={{ margin: 0, fontSize: 13.5 }}>{a.text}</p>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    fontSize: 11,
+                    color: "var(--steel-light)",
+                  }}
+                >
+                  {a.createdByName} ·{" "}
+                  {a.createdAt?.toDate?.().toLocaleString("ar-EG") || "—"}
+                </p>
+              </div>
+              <button
+                className="btn"
+                style={{
+                  fontSize: 12,
+                  padding: "4px 10px",
+                  color: "var(--danger)",
+                  borderColor: "var(--danger)",
+                }}
+                onClick={() => handleDelete(a.id)}
+                disabled={busyId === a.id}
+              >
+                حذف
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: "var(--steel)", marginBottom: 16 }}>
+        الإعلانات السريعة بتتضاف من الصفحة الرئيسية. تقدر تحذف أي إعلان من
+        هنا.
+      </p>
+      <Section title="الرصيف البحري" items={dock} />
+      <Section title="ساحة الجزيره" items={yard} />
+    </div>
+  );
+}
+
+/* ===================== الأسعار ===================== */
+
+function PricesTab({ uid }) {
+  const [prices, setPrices] = useState({});
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeTonPrices(setPrices);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const source = Object.keys(prices).length > 0 ? prices : DEMO_TON_PRICES;
+    const v = {};
+    TON_CATEGORIES.forEach((c) => (v[c] = source[c]?.pricePerTon ?? 0));
+    setValues(v);
+  }, [prices]);
+
+  async function saveAll() {
+    setSaving(true);
+    try {
+      await Promise.all(
+        TON_CATEGORIES.map((c) => setTonPrice(c, values[c] || 0, uid))
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      {TON_CATEGORIES.map((c) => {
+        const currentData = prices[c];
+        const currentPrice = currentData?.pricePerTon ?? 0;
+        const newPrice = values[c] ?? 0;
+        const hasChange = Number(newPrice) !== Number(currentPrice);
+
+        return (
+          <div key={c} className="admin-row">
+            <span style={{ flex: 1 }}>{c}</span>
+            {currentData && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--steel-light)",
+                  marginInlineEnd: 6,
+                }}
+              >
+                الحالي: {Number(currentPrice).toLocaleString("ar-EG")}
+              </span>
+            )}
+            <span className="unit">ج/طن</span>
+            <input
+              type="number"
+              value={values[c] ?? 0}
+              onChange={(e) => setValues({ ...values, [c]: e.target.value })}
+              style={{
+                width: 110,
+                borderColor: hasChange ? "var(--crane)" : undefined,
+              }}
+            />
+          </div>
+        );
+      })}
+      <button
+        className="btn btn-primary"
+        style={{ marginTop: 14 }}
+        onClick={saveAll}
+        disabled={saving}
+      >
+        {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
+      </button>
+      <p
+        style={{
+          fontSize: 11.5,
+          color: "var(--steel-light)",
+          marginTop: 10,
+          lineHeight: 1.7,
+        }}
+      >
+        ملاحظة: المؤشرات في شريط الأسعار هتتحدّث تلقائياً (⬆ أخضر، ⬇ أحمر، ▬
+        أصفر للثبات 5 أيام).
+      </p>
+    </div>
+  );
+}
+
+/* ===================== المعدات ===================== */
+
+function EquipmentTab({ uid }) {
+  const [prices, setPrices] = useState({});
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeEquipmentPrices(setPrices);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const v = {};
+    EQUIPMENT.forEach(
+      (eq) => (v[eq.id] = prices[eq.id]?.pricePerHour ?? eq.pricePerHour)
+    );
+    setValues(v);
+  }, [prices]);
+
+  async function saveAll() {
+    setSaving(true);
+    try {
+      await Promise.all(
+        EQUIPMENT.map((eq) =>
+          setEquipmentPrice(eq.id, values[eq.id] || 0, uid)
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      {EQUIPMENT.map((eq) => (
+        <div key={eq.id} className="admin-row">
+          <span style={{ flex: 1 }}>{eq.name}</span>
+          <span className="unit">ج/ساعة</span>
+          <input
+            type="number"
+            value={values[eq.id] ?? 0}
+            onChange={(e) => setValues({ ...values, [eq.id]: e.target.value })}
+            style={{ width: 110 }}
+          />
+        </div>
+      ))}
+      <button
+        className="btn btn-primary"
+        style={{ marginTop: 14 }}
+        onClick={saveAll}
+        disabled={saving}
+      >
+        {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
+      </button>
+    </div>
+  );
+}
+
+/* ===================== التوثيق ===================== */
+
+function VerificationTab() {
+  const [filter, setFilter] = useState("pending");
+  const [allRequests, setAllRequests] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+  const [rejectingId, setRejectingId] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const unsub = subscribeAllVerifications(setAllRequests, (err) => {
+      console.error("فشل تحميل طلبات التوثيق:", err);
+      setError("تعذر تحميل الطلبات. جرب تحديث الصفحة.");
+    });
+    return () => unsub();
+  }, []);
+
+  const requests = allRequests.filter((r) =>
+    filter === "all" ? true : r.status === filter
+  );
+
+  async function handleApprove(req) {
+    setBusyId(req.id);
+    try {
+      await approveVerification(req);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function confirmReject(req) {
+    if (!rejectingId) return;
+    setBusyId(req.id);
+    try {
+      await rejectVerification(req.id, rejectReason.trim(), req.uid);
+      setRejectingId(null);
+      setRejectReason("");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const labels = {
+    pending: "معلق",
+    approved: "مقبول",
+    rejected: "مرفوض",
+    all: "الكل",
+  };
+  const counts = {
+    pending: allRequests.filter((r) => r.status === "pending").length,
+    approved: allRequests.filter((r) => r.status === "approved").length,
+    rejected: allRequests.filter((r) => r.status === "rejected").length,
+    all: allRequests.length,
+  };
+
+  return (
+    <div>
+      {error && (
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--danger)",
+            marginBottom: 10,
+          }}
+        >
+          {error}
+        </p>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          marginBottom: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        {["pending", "approved", "rejected", "all"].map((s) => (
+          <button
+            key={s}
+            className="btn"
+            style={{
+              fontSize: 12,
+              padding: "5px 12px",
+              background: filter === s ? "var(--ink)" : "transparent",
+              color: filter === s ? "var(--paper)" : "var(--ink)",
+              borderColor: filter === s ? "var(--ink)" : "var(--line)",
+            }}
+            onClick={() => setFilter(s)}
+          >
+            {labels[s]} ({counts[s]})
+          </button>
+        ))}
+      </div>
+
+      {requests.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--steel)" }}>
+          لا توجد طلبات في هذه الحالة.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {requests.map((req) => (
+            <div
+              key={req.id}
+              style={{
+                background: "var(--paper-raised)",
+                border: "1px solid var(--line)",
+                borderRadius: "var(--radius)",
+                padding: 14,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 10,
+                }}
+              >
+                <div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}
+                  >
+                    {req.name || req.email}
+                  </p>
+                  <p
+                    style={{
+                      margin: "2px 0",
+                      fontSize: 12,
+                      color: "var(--steel)",
+                    }}
+                  >
+                    {req.email}
+                  </p>
+                  {req.phone && (
+                    <p
+                      style={{
+                        margin: "2px 0",
+                        fontSize: 12,
+                        color: "var(--steel)",
+                      }}
+                    >
+                      📞 {req.phone}
+                    </p>
+                  )}
+                  {req.notes && (
+                    <p
+                      style={{
+                        margin: "6px 0 0",
+                        fontSize: 12.5,
+                        color: "var(--ink)",
+                      }}
+                    >
+                      <b>ملاحظات:</b> {req.notes}
+                    </p>
+                  )}
+                  {req.status === "rejected" && req.rejectReason && (
+                    <p
+                      style={{
+                        margin: "6px 0 0",
+                        fontSize: 12.5,
+                        color: "var(--danger)",
+                      }}
+                    >
+                      <b>سبب الرفض:</b> {req.rejectReason}
+                    </p>
+                  )}
+                </div>
+
+                {req.status === "pending" && rejectingId !== req.id && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: "6px 14px", fontSize: 13 }}
+                      onClick={() => handleApprove(req)}
+                      disabled={busyId === req.id}
+                    >
+                      توثيق
+                    </button>
+                    <button
+                      className="btn"
+                      style={{
+                        padding: "6px 14px",
+                        fontSize: 13,
+                        color: "var(--danger)",
+                        borderColor: "var(--danger)",
+                      }}
+                      onClick={() => {
+                        setRejectingId(req.id);
+                        setRejectReason("");
+                      }}
+                      disabled={busyId === req.id}
+                    >
+                      رفض
+                    </button>
+                  </div>
+                )}
+
+                {req.status === "approved" && (
+                  <span className="badge" style={{ alignSelf: "flex-start" }}>
+                    ✅ موثق
+                  </span>
+                )}
+                {req.status === "rejected" && (
+                  <span
+                    className="badge badge-danger"
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    ❌ مرفوض
+                  </span>
+                )}
+              </div>
+
+              {rejectingId === req.id && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 12,
+                    borderTop: "1px dashed var(--line)",
+                  }}
+                >
+                  <input
+                    className="input"
+                    placeholder="سبب الرفض (سيظهر للتاجر)"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn"
+                      style={{
+                        background: "var(--danger)",
+                        borderColor: "var(--danger)",
+                        color: "#fff",
+                        fontSize: 13,
+                      }}
+                      onClick={() => confirmReject(req)}
+                      disabled={busyId === req.id}
+                    >
+                      تأكيد الرفض
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ fontSize: 13 }}
+                      onClick={() => {
+                        setRejectingId(null);
+                        setRejectReason("");
+                      }}
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ===================== المستخدمين ===================== */
+
+function UsersTab({ adminUid }) {
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [editingRoleId, setEditingRoleId] = useState(null);
+  const [pendingRole, setPendingRole] = useState("");
+
+  useEffect(() => {
+    const unsub = subscribeAllUsers(setUsers, (err) => {
+      console.error("فشل تحميل المستخدمين:", err);
+      setError("تعذر تحميل المستخدمين.");
+    });
+    return () => unsub();
+  }, []);
+
+  const filtered = useMemo(() => {
+    let list = users;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (u) =>
+          (u.name || "").toLowerCase().includes(q) ||
+          (u.email || "").toLowerCase().includes(q) ||
+          (u.phone || "").includes(q) ||
+          (u.company || "").toLowerCase().includes(q)
+      );
+    }
+    if (roleFilter !== "all") {
+      list = list.filter((u) => u.role === roleFilter);
+    }
+    return list;
+  }, [users, search, roleFilter]);
+
+  const counts = useMemo(() => {
+    const c = { all: users.length };
+    ROLE_OPTIONS.forEach((r) => {
+      c[r.value] = users.filter((u) => u.role === r.value).length;
+    });
+    return c;
+  }, [users]);
+
+  async function handleRoleChange(u) {
+    if (!pendingRole || pendingRole === u.role) {
+      setEditingRoleId(null);
+      return;
+    }
+    setBusyId(u.id);
+    setError("");
+    setSuccess("");
+    try {
+      await changeUserRole(u.id, pendingRole, adminUid);
+      setSuccess(`تم تحديث دور ${u.name || u.email}`);
+      setEditingRoleId(null);
+      setPendingRole("");
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "تعذر تحديث الدور");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleToggleSuspend(u) {
+    const action = u.suspended ? "تفعيل" : "تعليق";
+    if (!window.confirm(`${action} حساب ${u.name || u.email}؟`)) return;
+    setBusyId(u.id);
+    setError("");
+    setSuccess("");
+    try {
+      await toggleUserSuspended(u.id, !u.suspended, adminUid);
+      setSuccess(`تم ${action} الحساب`);
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "تعذر تحديث الحساب");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div>
+      <div
+        style={{
+          background: "var(--crane-light)",
+          border: "1px solid var(--crane)",
+          borderRadius: "var(--radius)",
+          padding: "10px 14px",
+          marginBottom: 14,
+          fontSize: 12.5,
+          lineHeight: 1.7,
+        }}
+      >
+        🔐 تاب مخصص للأدمن الأساسي فقط.
+      </div>
+
+      {error && (
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--danger)",
+            background: "var(--danger-light)",
+            border: "1px solid var(--danger)",
+            borderRadius: "var(--radius)",
+            padding: "10px 14px",
+            marginBottom: 12,
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--kabbash)",
+            background: "var(--kabbash-light)",
+            border: "1px solid var(--kabbash)",
+            borderRadius: "var(--radius)",
+            padding: "10px 14px",
+            marginBottom: 12,
+          }}
+        >
+          ✅ {success}
+        </div>
+      )}
+
+      <input
+        className="input"
+        placeholder="ابحث بالاسم أو الإيميل أو الهاتف أو الشركة..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ marginBottom: 12 }}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          className="btn"
+          style={{
+            fontSize: 12,
+            padding: "5px 12px",
+            background: roleFilter === "all" ? "var(--ink)" : "transparent",
+            color: roleFilter === "all" ? "var(--paper)" : "var(--ink)",
+            borderColor: roleFilter === "all" ? "var(--ink)" : "var(--line)",
+          }}
+          onClick={() => setRoleFilter("all")}
+        >
+          الكل ({counts.all})
+        </button>
+        {ROLE_OPTIONS.map((r) => (
+          <button
+            key={r.value}
+            className="btn"
+            style={{
+              fontSize: 12,
+              padding: "5px 12px",
+              background:
+                roleFilter === r.value ? "var(--ink)" : "transparent",
+              color: roleFilter === r.value ? "var(--paper)" : "var(--ink)",
+              borderColor:
+                roleFilter === r.value ? "var(--ink)" : "var(--line)",
+            }}
+            onClick={() => setRoleFilter(r.value)}
+          >
+            {r.label} ({counts[r.value] || 0})
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--steel)" }}>
+          {search.trim() || roleFilter !== "all"
+            ? "لا توجد نتائج مطابقة."
+            : "لا يوجد مستخدمين بعد."}
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filtered.map((u) => {
+            const isEditing = editingRoleId === u.id;
+            const isBusy = busyId === u.id;
+
+            return (
+              <div
+                key={u.id}
+                style={{
+                  background: "var(--paper-raised)",
+                  border: "1px solid var(--line)",
+                  borderRadius: "var(--radius)",
+                  padding: 14,
+                  opacity: u.suspended ? 0.6 : 1,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ minWidth: 220, flex: 1 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        marginBottom: 4,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <p
+                        style={{
+                          margin: 0,
+                          fontWeight: 700,
+                          fontSize: 14,
+                        }}
+                      >
+                        {u.name || "بدون اسم"}
+                      </p>
+                      <span style={roleBadgeStyle(u.role)}>
+                        {getRoleLabel(u.role)}
+                      </span>
+                      {u.suspended && (
+                        <span
+                          className="badge badge-danger"
+                          style={{ fontSize: 11 }}
+                        >
+                          معلق
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 12.5,
+                        color: "var(--steel)",
+                      }}
+                    >
+                      {u.email}
+                    </p>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        marginTop: 6,
+                        fontSize: 12,
+                        color: "var(--steel)",
+                      }}
+                    >
+                      {u.phone && <span>📞 {u.phone}</span>}
+                      {u.governorate && <span>📍 {u.governorate}</span>}
+                      {u.company && <span>🏢 {u.company}</span>}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    {!isEditing && (
+                      <button
+                        className="btn"
+                        style={{
+                          fontSize: 12,
+                          padding: "5px 12px",
+                          color: "var(--kabbash)",
+                          borderColor: "var(--kabbash)",
+                        }}
+                        onClick={() => {
+                          setEditingRoleId(u.id);
+                          setPendingRole(u.role || "");
+                        }}
+                        disabled={isBusy}
+                      >
+                        تغيير الدور
+                      </button>
+                    )}
+
+                    <button
+                      className="btn"
+                      style={{
+                        fontSize: 12,
+                        padding: "5px 12px",
+                        color: u.suspended ? "var(--kabbash)" : "var(--danger)",
+                        borderColor: u.suspended
+                          ? "var(--kabbash)"
+                          : "var(--danger)",
+                      }}
+                      onClick={() => handleToggleSuspend(u)}
+                      disabled={isBusy}
+                    >
+                      {u.suspended ? "تفعيل الحساب" : "تعليق الحساب"}
+                    </button>
+                  </div>
+                </div>
+
+                {isEditing && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      paddingTop: 12,
+                      borderTop: "1px dashed var(--line)",
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        marginBottom: 8,
+                      }}
+                    >
+                      اختر الدور الجديد:
+                    </p>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        flexWrap: "wrap",
+                        marginBottom: 10,
+                      }}
+                    >
+                      {ROLE_OPTIONS.map((r) => (
+                        <button
+                          key={r.value}
+                          className="btn"
+                          style={{
+                            fontSize: 12,
+                            padding: "5px 12px",
+                            background:
+                              pendingRole === r.value
+                                ? "var(--kabbash)"
+                                : "transparent",
+                            color:
+                              pendingRole === r.value
+                                ? "#fff"
+                                : "var(--ink)",
+                            borderColor:
+                              pendingRole === r.value
+                                ? "var(--kabbash)"
+                                : "var(--line)",
+                          }}
+                          onClick={() => setPendingRole(r.value)}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className="btn btn-primary"
+                        style={{ fontSize: 13 }}
+                        onClick={() => handleRoleChange(u)}
+                        disabled={isBusy || !pendingRole}
+                      >
+                        {isBusy ? "جاري الحفظ..." : "تأكيد التغيير"}
+                      </button>
+                      <button
+                        className="btn"
+                        style={{ fontSize: 13 }}
+                        onClick={() => {
+                          setEditingRoleId(null);
+                          setPendingRole("");
+                        }}
+                        disabled={isBusy}
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ===================== الرسائل ===================== */
+
+function MessagesTab() {
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    const unsub = subscribeMessages(setMessages);
+    return () => unsub();
+  }, []);
+
+  if (messages.length === 0) {
+    return (
+      <p style={{ fontSize: 13, color: "var(--steel)" }}>
+        لا توجد رسائل حتى الآن.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {messages.map((m) => (
+        <div
+          key={m.id}
+          style={{
+            background: "var(--paper-raised)",
+            border: "1px solid var(--line)",
+            borderRadius: "var(--radius)",
+            padding: 14,
+          }}
+          onClick={() => !m.read && markMessageRead(m.id)}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 6,
+            }}
+          >
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
+              {m.name || "بدون اسم"}
+            </p>
+            {!m.read && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--kabbash)",
+                  fontWeight: 700,
+                }}
+              >
+                جديدة
+              </span>
+            )}
+          </div>
+          <p
+            style={{
+              margin: "0 0 6px",
+              fontSize: 12,
+              color: "var(--steel)",
+            }}
+          >
+            {m.email}
+          </p>
+          <p style={{ margin: 0, fontSize: 13 }}>{m.text}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ===================== مكونات مساعدة ===================== */
+
+function Pill({ active, onClick, children }) {
+  return (
+    <button
+      className="btn"
+      style={{
+        fontSize: 12.5,
+        padding: "7px 14px",
+        background: active ? "var(--kabbash)" : "transparent",
+        color: active ? "#fff" : "var(--ink)",
+        borderColor: active ? "var(--kabbash)" : "var(--line)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Badge({ children }) {
+  return (
+    <span
+      style={{
+        background: "#fff",
+        color: "var(--danger)",
+        borderRadius: 999,
+        padding: "1px 7px",
+        fontSize: 11,
+        fontWeight: 900,
+        minWidth: 18,
+        textAlign: "center",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
