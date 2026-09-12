@@ -147,6 +147,7 @@ export default function NavDrawer() {
                 <DrawerLink onClick={() => go("/dock")}>الرصيف البحري</DrawerLink>
                 <DrawerLink onClick={() => go("/yard")}>ساحة الجزيره</DrawerLink>
                 <DrawerLink onClick={() => go("/calculator")}>🧪 أداة الحساب (تجربة)</DrawerLink>
+                <DrawerLink onClick={() => go("/experimental")}>🔬 أسعار آلية (تجربة)</DrawerLink>
 
                 {(role === ROLES.ADMIN || isPrimaryAdmin) && (
                   <DrawerLink onClick={() => go("/admin")}>لوحة الإدمن</DrawerLink>
