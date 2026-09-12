@@ -52,31 +52,15 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
     return () => unsub();
   }, []);
 
-  const categoriesByType = useMemo(() => {
-    const map = {
-      [SALE_TYPES.TON]: [],
-      [SALE_TYPES.PIECE]: [],
-      [SALE_TYPES.DEAL]: [],
-    };
-    categories.forEach((c) => {
-      if (map[c.saleType]) map[c.saleType].push(c);
-    });
-    return map;
-  }, [categories]);
+  // دالة مساعدة: نلاقي صنف بالاسم
+  function findCategoryByName(name) {
+    return categories.find((c) => c.name === name);
+  }
 
-  const usedKeys = items.map((i) => `${i.category}|${i.saleType}`);
-
-  // إضافة صنف جديد — يبدأ بالطن كافتراضي
+  // إضافة سطر جديد — بندور على أول صنف غير مستخدم
   function addItem() {
-    // اختار أول صنف غير مستخدم (بيدور من أول نوع لآخر نوع)
-    const all = [
-      ...categoriesByType[SALE_TYPES.TON],
-      ...categoriesByType[SALE_TYPES.PIECE],
-      ...categoriesByType[SALE_TYPES.DEAL],
-    ];
-    const firstFree = all.find(
-      (c) => !usedKeys.includes(`${c.name}|${c.saleType}`)
-    );
+    const usedNames = items.map((i) => i.category);
+    const firstFree = categories.find((c) => !usedNames.includes(c.name));
     if (!firstFree) return;
 
     setItems([
@@ -99,9 +83,9 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
     setItems(items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
   }
 
-  // ✅ محدّث: بيتعامل مع تغيير الصنف صح
-  function changeCategoryById(idx, categoryId) {
-    const cat = categories.find((c) => c.id === categoryId);
+  // ✅ محدّث: بيتعامل مع تغيير الصنف صح بالـ name
+  function changeCategory(idx, newName) {
+    const cat = findCategoryByName(newName);
     if (!cat) return;
     setItems(
       items.map((it, i) =>
@@ -110,8 +94,13 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
               ...it,
               category: cat.name,
               saleType: cat.saleType,
+              // لو الصفقة، نخلي الكمية 1
               qty:
-                cat.saleType === SALE_TYPES.DEAL ? "1" : it.qty || "1",
+                cat.saleType === SALE_TYPES.DEAL
+                  ? "1"
+                  : it.qty && it.qty !== "1"
+                  ? it.qty
+                  : "1",
             }
           : it
       )
@@ -132,6 +121,11 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
 
     for (const it of items) {
       if (!it.category) return setError("اختار صنف لكل سطر");
+      if (!it.saleType) {
+        return setError(
+          `الصنف "${it.category}" مالوش نوع بيع. اختاره من القايمة تاني.`
+        );
+      }
       if (Number(it.qty) <= 0)
         return setError(`الكمية غير صحيحة في: ${it.category}`);
       if (Number(it.unitPrice) <= 0)
@@ -139,26 +133,28 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
 
       if (isEdit && Number(it.qty) < Number(it.reservedQty || 0)) {
         return setError(
-          `الكمية في "${it.category}" أقل من المحجوز (${it.reservedQty}). لازم تكون مساوية أو أكبر.`
+          `الكمية في "${it.category}" أقل من المحجوز (${it.reservedQty}).`
         );
       }
     }
 
-    const dups = usedKeys.filter((c, i) => usedKeys.indexOf(c) !== i);
-    if (dups.length > 0) {
-      const [name] = dups[0].split("|");
-      return setError(`الصنف "${name}" مكرر`);
-    }
+    const names = items.map((i) => i.category);
+    const dups = names.filter((c, i) => names.indexOf(c) !== i);
+    if (dups.length > 0) return setError(`الصنف "${dups[0]}" مكرر`);
 
     setSaving(true);
     try {
-      const newItems = items.map((it) => ({
-        category: it.category,
-        saleType: it.saleType,
-        qty: Number(it.qty),
-        unitPrice: Number(it.unitPrice),
-        reservedQty: Number(it.reservedQty || 0),
-      }));
+      const newItems = items.map((it) => {
+        // ✅ تأكيد نهائي: نتأكد إن الـ saleType محفوظ صح
+        const catFromDb = findCategoryByName(it.category);
+        return {
+          category: it.category,
+          saleType: catFromDb?.saleType || it.saleType || SALE_TYPES.TON,
+          qty: Number(it.qty),
+          unitPrice: Number(it.unitPrice),
+          reservedQty: Number(it.reservedQty || 0),
+        };
+      });
 
       if (isEdit) {
         await updateAd(
@@ -353,16 +349,14 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
               >
                 {items.map((it, idx) => {
                   const isDeal = it.saleType === SALE_TYPES.DEAL;
-                  // ✅ قايمة الأصناف المتاحة: اللي في نفس saleType أو اللي مش مستخدمة
-                  const availableCats = categories.filter((c) => {
-                    // لو نفس السطر الحالي → اعرضه
-                    if (c.name === it.category) return true;
-                    // لو نفس النوع → اعرضه لو مش مستخدم في سطر تاني
-                    const key = `${c.name}|${c.saleType}`;
-                    return !usedKeys.some(
-                      (u, ui) => u === key && ui !== idx
-                    );
-                  });
+                  const usedElsewhere = items
+                    .filter((_, i) => i !== idx)
+                    .map((i) => i.category);
+                  const availableCats = categories.filter(
+                    (c) =>
+                      c.name === it.category ||
+                      !usedElsewhere.includes(c.name)
+                  );
 
                   return (
                     <div
@@ -385,15 +379,9 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                         <select
                           className="input"
                           value={it.category}
-                          onChange={(e) => {
-                            const cat = availableCats.find(
-                              (c) => c.name === e.target.value
-                            );
-                            if (cat) changeCategoryById(idx, cat.id);
-                          }}
+                          onChange={(e) => changeCategory(idx, e.target.value)}
                           style={{ fontSize: 13 }}
                         >
-                          {/* خيارات مجمّعة حسب النوع */}
                           {Object.values(SALE_TYPES).map((type) => {
                             const catsOfType = availableCats.filter(
                               (c) => c.saleType === type
@@ -473,9 +461,11 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                         }}
                       >
                         <span style={saleTypeBadge(it.saleType)}>
-                          {SALE_TYPES_LABELS[it.saleType]}
+                          {SALE_TYPES_LABELS[it.saleType] || "—"}
                         </span>
-                        <span>الوحدة: {SALE_TYPE_UNIT[it.saleType]}</span>
+                        <span>
+                          الوحدة: {SALE_TYPE_UNIT[it.saleType] || "—"}
+                        </span>
                         {isDeal && (
                           <span style={{ color: "var(--crane)" }}>
                             🔒 السعر والكمية للقراءة فقط
