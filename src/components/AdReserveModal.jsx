@@ -20,7 +20,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
 
   const [equipmentHours, setEquipmentHours] = useState({});
   const [workerCount, setWorkerCount] = useState(0);
-  const [carCount, setCarCount] = useState(0);
+  const [carCount, setCarCount] = useState(1); // ← افتراضي 1 (إجباري)
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -64,13 +64,16 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
 
   const grandTotal = itemsTotal + equipmentTotal + workersTotal + carsTotal;
 
+  // الشروط الجديدة
   const hasAnyItem = itemsWithTotals.some((it) => it.qty > 0);
   const hasAnyEquipment = equipmentWithTotals.some((eq) => eq.hours > 0);
   const hasWorkers = Number(workerCount) > 0;
-  const hasCars = Number(carCount) > 0;
+  const hasCars = Number(carCount) >= 1;
 
+  // لازم سيارة + (صنف أو معدة أو عامل)
+  const hasEquipmentOrWorkers = hasAnyEquipment || hasWorkers;
   const canSubmit =
-    hasAnyItem || hasAnyEquipment || hasWorkers || hasCars;
+    hasCars && (hasAnyItem || hasEquipmentOrWorkers);
 
   function setItemQty(category, value, max) {
     const num = Number(value || 0);
@@ -83,8 +86,14 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
     e.preventDefault();
     setError("");
 
-    if (!canSubmit) {
-      setError("اختر صنف واحد على الأقل أو أضف معدات/عمال/سيارات");
+    if (!hasCars) {
+      setError("عدد السيارات إجباري — لازم سيارة واحدة على الأقل");
+      return;
+    }
+    if (!hasAnyItem && !hasEquipmentOrWorkers) {
+      setError(
+        "لازم تختار صنف واحد على الأقل، أو معدة، أو عامل"
+      );
       return;
     }
 
@@ -164,7 +173,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
           <div>
             <h2 className="arm-title">تأكيد الحجز</h2>
             <p className="arm-subtitle">
-              عدّل الكميات اللي محتاجها، وأضف معدات أو عمال لو حبيت.
+              عدّل الكميات وأضف المعدات والعمال والسيارات. السيارة إجبارية.
             </p>
           </div>
           <button
@@ -178,7 +187,8 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <Section title="الأصناف">
+          {/* الأصناف */}
+          <Section title="الأصناف (اختياري)">
             {itemsWithTotals.map((it) => (
               <div key={it.category} className="arm-row">
                 <div className="arm-row-info">
@@ -212,6 +222,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             ))}
           </Section>
 
+          {/* المعدات */}
           <Section title="المعدات (اختياري)">
             {equipmentWithTotals.map((eq) => (
               <div key={eq.id} className="arm-row">
@@ -247,7 +258,8 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             ))}
           </Section>
 
-          <Section title="العمال (اختياري)">
+          {/* العمال */}
+          <Section title="العمال (اختياري — بس إجباري معدة أو عامل)">
             <div className="arm-row">
               <div className="arm-row-info">
                 <span className="arm-row-name">عدد العمال</span>
@@ -276,7 +288,8 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             </div>
           </Section>
 
-          <Section title="السيارات (اختياري)">
+          {/* السيارات — إجباري */}
+          <Section title="السيارات (إجباري)" required>
             <div className="arm-row">
               <div className="arm-row-info">
                 <span className="arm-row-name">عدد السيارات</span>
@@ -286,11 +299,11 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
                 <input
                   type="number"
                   className="input arm-input"
-                  min="0"
+                  min="1"
                   step="1"
                   value={carCount || ""}
                   onChange={(e) => setCarCount(e.target.value)}
-                  placeholder="0"
+                  placeholder="1"
                 />
                 <span className="arm-unit">سيارة</span>
               </div>
@@ -300,6 +313,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             </div>
           </Section>
 
+          {/* الإجماليات */}
           <div className="arm-summary">
             {itemsTotal > 0 && <SummaryRow label="الأصناف" value={itemsTotal} />}
             {equipmentTotal > 0 && (
@@ -314,6 +328,12 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
               <span>{grandTotal.toLocaleString("ar-EG")}ج</span>
             </div>
           </div>
+
+          {!canSubmit && (
+            <p className="arm-hint">
+              ⚠️ لازم تختار: سيارة واحدة على الأقل + (صنف أو معدة أو عامل)
+            </p>
+          )}
 
           {error && <p className="arm-error">{error}</p>}
 
@@ -346,10 +366,13 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, children, required }) {
   return (
     <div className="arm-section">
-      <h3 className="arm-section-title">{title}</h3>
+      <h3 className="arm-section-title">
+        {title}
+        {required && <span className="arm-req"> *</span>}
+      </h3>
       <div className="arm-section-body">{children}</div>
     </div>
   );
@@ -444,6 +467,10 @@ const styles = `
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
+  .arm-req {
+    color: var(--danger);
+    font-weight: 900;
+  }
   .arm-section-body {
     display: flex;
     flex-direction: column;
@@ -523,6 +550,15 @@ const styles = `
   .arm-grand-total span:last-child {
     font-size: 20px;
     font-weight: 900;
+  }
+  .arm-hint {
+    margin: 10px 0 0;
+    padding: 8px 12px;
+    background: var(--crane-light);
+    color: var(--crane);
+    font-size: 12px;
+    border-radius: 8px;
+    line-height: 1.6;
   }
   .arm-error {
     margin: 12px 0 0;
