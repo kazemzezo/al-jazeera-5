@@ -1,18 +1,31 @@
 import { useNavigate } from "react-router-dom";
-import { LOCATIONS } from "../lib/catalog";
-import { AD_STATUS, AD_STATUS_LABELS, getAdTotal, getAvailableItems } from "../lib/ads";
+import { LOCATIONS, SALE_TYPES, SALE_TYPE_UNIT } from "../lib/catalog";
+import {
+  AD_STATUS,
+  AD_STATUS_LABELS,
+  getAdTotal,
+  getAvailableItems,
+} from "../lib/ads";
 
 export default function AdCard({ ad }) {
   const navigate = useNavigate();
 
   const total = getAdTotal(ad);
   const available = getAvailableItems(ad);
-  const totalAvailableTons = available.reduce(
-    (s, it) => s + Number(it.available || 0),
-    0
+
+  // نحسب المتاح مع وحداته
+  const availableByType = available.reduce(
+    (acc, it) => {
+      const type = it.saleType || SALE_TYPES.TON;
+      acc[type] = (acc[type] || 0) + Number(it.available || 0);
+      return acc;
+    },
+    {}
   );
+
   const categories = (ad.items || []).map((it) => it.category).join(" · ");
-  const soldOut = ad.status === AD_STATUS.SOLD_OUT || ad.status === AD_STATUS.CLOSED;
+  const soldOut =
+    ad.status === AD_STATUS.SOLD_OUT || ad.status === AD_STATUS.CLOSED;
 
   const locationLabel =
     ad.location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره";
@@ -54,14 +67,18 @@ export default function AdCard({ ad }) {
 
       <div className="ad-card-body">
         <h3 className="ad-card-title">{ad.title}</h3>
-        {categories && (
-          <p className="ad-card-categories">{categories}</p>
-        )}
+        {categories && <p className="ad-card-categories">{categories}</p>}
 
         <div className="ad-card-footer">
-          {!soldOut && totalAvailableTons > 0 && (
+          {!soldOut && Object.keys(availableByType).length > 0 && (
             <span className="ad-card-available">
-              {totalAvailableTons.toLocaleString("ar-EG")} طن متاح
+              {Object.entries(availableByType)
+                .map(
+                  ([type, qty]) =>
+                    `${qty.toLocaleString("ar-EG")} ${SALE_TYPE_UNIT[type] || "طن"}`
+                )
+                .join(" · ")}{" "}
+              متاح
             </span>
           )}
           {soldOut && <span className="ad-card-soldout-text">غير متاح</span>}
@@ -90,7 +107,6 @@ export default function AdCard({ ad }) {
           outline: 2px solid var(--crane);
           outline-offset: 2px;
         }
-
         .ad-card-image {
           position: relative;
           background: var(--paper-sunken);
@@ -136,7 +152,6 @@ export default function AdCard({ ad }) {
           font-weight: 900;
           letter-spacing: 1px;
         }
-
         .ad-card-body {
           padding: 10px 12px 12px;
         }
@@ -157,7 +172,8 @@ export default function AdCard({ ad }) {
           justify-content: space-between;
           align-items: center;
           gap: 6px;
-          font-size: 12.5px;
+          font-size: 12px;
+          flex-wrap: wrap;
         }
         .ad-card-available {
           color: var(--kabbash);
