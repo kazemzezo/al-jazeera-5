@@ -4,6 +4,7 @@ import {
   subscribeAd,
   AD_STATUS,
   AD_STATUS_LABELS,
+  AD_STATUS_COLORS,
   getAdTotal,
   getAvailableItems,
   isAdReservable,
@@ -11,7 +12,6 @@ import {
 import {
   LOCATIONS,
   SALE_TYPES,
-  SALE_TYPES_LABELS,
   SALE_TYPE_UNIT,
 } from "../lib/catalog";
 import { useAuth } from "../context/AuthContext";
@@ -84,6 +84,9 @@ export default function AdDetails() {
   const total = getAdTotal(ad);
   const available = getAvailableItems(ad);
   const reservable = isAdReservable(ad);
+  const statusColors = AD_STATUS_COLORS[ad.status] || AD_STATUS_COLORS.active;
+  const isPulsing = [AD_STATUS.LOADING, AD_STATUS.INACTIVE].includes(ad.status);
+
   const locationLabel =
     ad.location === LOCATIONS.DOCK ? "الرصيف البحري" : "ساحة الجزيره";
   const dateLabel = ad.createdAt?.toDate?.().toLocaleDateString("ar-EG") || "—";
@@ -114,27 +117,46 @@ export default function AdDetails() {
       )}
 
       <div className="ad-details-card">
-        {ad.imageUrl ? (
-          <div className="ad-details-image">
+        <div className="ad-details-image-wrap">
+          {ad.imageUrl ? (
             <img
               src={ad.imageUrl}
               alt={ad.title}
+              className="ad-details-image"
               onError={(e) => {
                 e.target.style.display = "none";
               }}
             />
-          </div>
-        ) : (
-          <div className="ad-details-image-fallback">📦</div>
-        )}
+          ) : (
+            <div className="ad-details-image-fallback">📦</div>
+          )}
+
+          {/* شارة الحالة الكبيرة */}
+          <span
+            className={"ad-details-status-badge" + (isPulsing ? " pulse" : "")}
+            style={{
+              background: statusColors.bg,
+              boxShadow: `0 4px 12px ${statusColors.light}`,
+            }}
+          >
+            <span className="ad-details-status-dot" />
+            {AD_STATUS_LABELS[ad.status] || ad.status}
+          </span>
+        </div>
+
+        {/* شريط الحالة السفلي */}
+        <div
+          style={{
+            height: 4,
+            background: statusColors.bg,
+            opacity: 0.85,
+          }}
+        />
 
         <div className="ad-details-body">
           <div className="ad-details-meta">
             <span className="ad-details-badge">{locationLabel}</span>
             <span className="ad-details-date">📅 {dateLabel}</span>
-            <span className={"ad-details-status status-" + ad.status}>
-              {AD_STATUS_LABELS[ad.status]}
-            </span>
           </div>
 
           <h1 className="ad-details-title">{ad.title}</h1>
@@ -143,7 +165,7 @@ export default function AdDetails() {
             <p className="ad-details-description">{ad.description}</p>
           )}
 
-          <h3 className="ad-details-subtitle">الأصناف المتاحة</h3>
+          <h3 className="ad-details-subtitle">الأصناف</h3>
           <div className="ad-details-items">
             {(ad.items || []).map((it, i) => {
               const avail = Number(it.qty || 0) - Number(it.reservedQty || 0);
@@ -163,9 +185,7 @@ export default function AdDetails() {
                   <div className="item-info">
                     <span className="item-category">
                       {it.category}
-                      {isDeal && (
-                        <span className="item-type-tag">صفقة</span>
-                      )}
+                      {isDeal && <span className="item-type-tag">صفقة</span>}
                     </span>
                     <span className="item-available">
                       {soldOut
@@ -206,9 +226,7 @@ export default function AdDetails() {
               disabled
               style={{ opacity: 0.6, cursor: "not-allowed" }}
             >
-              {ad.status === AD_STATUS.CLOSED
-                ? "تم الغلق من الإدارة"
-                : "تم البيع"}
+              {AD_STATUS_LABELS[ad.status] || "غير متاح"}
             </button>
           )}
 
@@ -239,12 +257,13 @@ export default function AdDetails() {
           border-radius: 16px;
           overflow: hidden;
         }
-        .ad-details-image {
+        .ad-details-image-wrap {
+          position: relative;
           background: var(--paper-sunken);
           max-height: 380px;
           overflow: hidden;
         }
-        .ad-details-image img {
+        .ad-details-image {
           width: 100%;
           height: auto;
           display: block;
@@ -257,6 +276,32 @@ export default function AdDetails() {
           justify-content: center;
           font-size: 64px;
           color: var(--steel-light);
+        }
+        .ad-details-status-badge {
+          position: absolute;
+          top: 12px;
+          inset-inline-end: 12px;
+          color: #fff;
+          font-size: 13px;
+          padding: 6px 14px;
+          border-radius: 999px;
+          font-weight: 800;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .ad-details-status-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #fff;
+        }
+        .ad-details-status-badge.pulse {
+          animation: ad-details-pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes ad-details-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.75; transform: scale(0.97); }
         }
         .ad-details-body { padding: 22px; }
         .ad-details-meta {
@@ -275,16 +320,6 @@ export default function AdDetails() {
           font-weight: 700;
         }
         .ad-details-date { color: var(--steel); }
-        .ad-details-status {
-          padding: 3px 10px;
-          border-radius: 999px;
-          font-weight: 700;
-          margin-inline-start: auto;
-        }
-        .status-active { background: var(--kabbash-light); color: var(--kabbash); }
-        .status-partial { background: var(--crane-light); color: var(--crane); }
-        .status-sold_out { background: var(--paper-sunken); color: var(--steel); }
-        .status-closed { background: var(--danger-light); color: var(--danger); }
         .ad-details-title {
           margin: 0 0 10px;
           font-size: 22px;
