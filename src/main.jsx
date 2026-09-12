@@ -8,3 +8,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <App />
   </React.StrictMode>
 );
+
+// تسجيل Service Worker (PWA)
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/al-jazeera-5/sw.js")
+      .then((reg) => console.log("SW registered:", reg.scope))
+      .catch((err) => console.error("SW registration failed:", err));
+  });
+}
