@@ -16,18 +16,43 @@ import { db } from "./firebase";
 
 // حالات الإعلان
 export const AD_STATUS = {
-  ACTIVE: "active",
-  PARTIAL: "partial",
-  SOLD_OUT: "sold_out",
-  CLOSED: "closed",
+  ACTIVE: "active",           // 🟢 نشط
+  PARTIAL: "partial",         // 🟡 متاح جزئياً
+  LOADING: "loading",         // 🟡 جاري التحميل
+  SOLD_OUT: "sold_out",       // 🔴 تم البيع
+  INACTIVE: "inactive",       // 🔴 غير نشط (أرشيف)
+  CLOSED: "closed",           // 🔴 مغلق
 };
 
 export const AD_STATUS_LABELS = {
-  [AD_STATUS.ACTIVE]: "متاح",
+  [AD_STATUS.ACTIVE]: "نشط",
   [AD_STATUS.PARTIAL]: "متاح جزئياً",
+  [AD_STATUS.LOADING]: "جاري التحميل",
   [AD_STATUS.SOLD_OUT]: "تم البيع",
-  [AD_STATUS.CLOSED]: "تم الغلق من الإدارة",
+  [AD_STATUS.INACTIVE]: "غير نشط",
+  [AD_STATUS.CLOSED]: "مغلق",
 };
+
+// ألوان الحالات (للـ UI)
+export const AD_STATUS_COLORS = {
+  [AD_STATUS.ACTIVE]: { bg: "#16a34a", light: "rgba(22, 163, 74, 0.12)" },
+  [AD_STATUS.PARTIAL]: { bg: "#f59e0b", light: "rgba(245, 158, 11, 0.12)" },
+  [AD_STATUS.LOADING]: { bg: "#eab308", light: "rgba(234, 179, 8, 0.15)" },
+  [AD_STATUS.SOLD_OUT]: { bg: "#dc2626", light: "rgba(220, 38, 38, 0.12)" },
+  [AD_STATUS.INACTIVE]: { bg: "#7a8894", light: "rgba(122, 136, 148, 0.15)" },
+  [AD_STATUS.CLOSED]: { bg: "#7a8894", light: "rgba(122, 136, 148, 0.15)" },
+};
+
+// الحالات النشطة (تظهر للتاجر)
+export const ACTIVE_STATUSES = [AD_STATUS.ACTIVE, AD_STATUS.PARTIAL];
+
+// الحالات المؤرشفة (تظهر في الأرشيف بس)
+export const ARCHIVE_STATUSES = [
+  AD_STATUS.LOADING,
+  AD_STATUS.SOLD_OUT,
+  AD_STATUS.INACTIVE,
+  AD_STATUS.CLOSED,
+];
 
 // ============ قراءة ============
 
@@ -65,17 +90,32 @@ export function subscribeAds(location, callback, onError) {
   );
 }
 
+// الإعلانات النشطة بس (للتاجر)
 export function subscribeActiveAds(callback, onError) {
   return onSnapshot(
     collection(db, "ads"),
     (snap) => {
       const items = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter(
-          (a) =>
-            a.status === AD_STATUS.ACTIVE ||
-            a.status === AD_STATUS.PARTIAL
-        )
+        .filter((a) => ACTIVE_STATUSES.includes(a.status))
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() || 0;
+          const tb = b.createdAt?.toMillis?.() || 0;
+          return tb - ta;
+        });
+      callback(items);
+    },
+    onError
+  );
+}
+
+// كل الإعلانات المتاحة للعرض (نشط + أرشيف)
+export function subscribeVisibleAds(callback, onError) {
+  return onSnapshot(
+    collection(db, "ads"),
+    (snap) => {
+      const items = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
         .sort((a, b) => {
           const ta = a.createdAt?.toMillis?.() || 0;
           const tb = b.createdAt?.toMillis?.() || 0;
@@ -104,11 +144,10 @@ export function subscribeAd(id, callback, onError) {
 
 // ============ كتابة ============
 
-// ✅ محدّث: بيحفظ saleType
 export async function createAd(ad, user) {
   const items = (ad.items || []).map((it) => ({
     category: it.category,
-    saleType: it.saleType || "ton",   // ← جديد
+    saleType: it.saleType || "ton",
     qty: Number(it.qty || 0),
     unitPrice: Number(it.unitPrice || 0),
     reservedQty: 0,
@@ -128,14 +167,13 @@ export async function createAd(ad, user) {
   return ref.id;
 }
 
-// ✅ محدّث: بيتأكد إن saleType محفوظ
 export async function updateAd(id, updates, uid) {
   const cleanUpdates = { ...updates };
 
   if (cleanUpdates.items) {
     cleanUpdates.items = cleanUpdates.items.map((it) => ({
       category: it.category,
-      saleType: it.saleType || "ton",   // ← جديد
+      saleType: it.saleType || "ton",
       qty: Number(it.qty || 0),
       unitPrice: Number(it.unitPrice || 0),
       reservedQty: Number(it.reservedQty || 0),
@@ -164,6 +202,12 @@ export async function applyReservationToAd(adId, reservedItems) {
   const snap = await getDoc(adRef);
   if (!snap.exists()) throw new Error("الإعلان غير موجود");
   const data = snap.data();
+
+  // لو الإعلان مش نشط، نرفض الحجز
+  if (!ACTIVE_STATUSES.includes(data.status)) {
+    throw new Error("الإعلان مش متاح للحجز");
+  }
+
   const items = (data.items || []).map((it) => {
     const r = reservedItems.find((x) => x.category === it.category);
     if (!r) return it;
@@ -197,10 +241,12 @@ export async function revertAdReservation(adId, reservedItems) {
       ),
     };
   });
-  const newStatus =
-    data.status === AD_STATUS.CLOSED
-      ? AD_STATUS.CLOSED
-      : computeAdStatus(items);
+
+  // لو الإعلان مؤرشف، نسيبه زي ما هو
+  const newStatus = ARCHIVE_STATUSES.includes(data.status)
+    ? data.status
+    : computeAdStatus(items);
+
   await updateDoc(adRef, {
     items,
     status: newStatus,
@@ -208,6 +254,41 @@ export async function revertAdReservation(adId, reservedItems) {
   });
 }
 
+// ============ إدارة الحالات (للأدمن) ============
+
+// تعليم إعلان "جاري التحميل"
+export async function markAdAsLoading(id, uid) {
+  await updateDoc(doc(db, "ads", id), {
+    status: AD_STATUS.LOADING,
+    statusChangedAt: serverTimestamp(),
+    statusChangedBy: uid,
+  });
+}
+
+// تعليم إعلان "غير نشط" (أرشيف)
+export async function markAdAsInactive(id, uid) {
+  await updateDoc(doc(db, "ads", id), {
+    status: AD_STATUS.INACTIVE,
+    statusChangedAt: serverTimestamp(),
+    statusChangedBy: uid,
+  });
+}
+
+// إعادة إعلان لأرشيف "غير نشط" → "نشط" (نادرًا)
+export async function reactivateAd(id, uid) {
+  const adRef = doc(db, "ads", id);
+  const snap = await getDoc(adRef);
+  if (!snap.exists()) throw new Error("الإعلان غير موجود");
+  const data = snap.data();
+  const newStatus = computeAdStatus(data.items);
+  await updateDoc(adRef, {
+    status: newStatus,
+    statusChangedAt: serverTimestamp(),
+    statusChangedBy: uid,
+  });
+}
+
+// غلق يدوي
 export async function closeAd(id, uid) {
   await updateDoc(doc(db, "ads", id), {
     status: AD_STATUS.CLOSED,
@@ -245,7 +326,7 @@ export function getAdTotal(ad) {
 
 export function isAdReservable(ad) {
   if (!ad) return false;
-  return ad.status === AD_STATUS.ACTIVE || ad.status === AD_STATUS.PARTIAL;
+  return ACTIVE_STATUSES.includes(ad.status);
 }
 
 export function getAvailableItems(ad) {
@@ -256,6 +337,31 @@ export function getAvailableItems(ad) {
       available: Number(it.qty || 0) - Number(it.reservedQty || 0),
     }))
     .filter((it) => it.available > 0);
+}
+
+// إحصائيات (للأدمن)
+export function getAdsStats(ads) {
+  return {
+    total: ads.length,
+    active: ads.filter((a) => a.status === AD_STATUS.ACTIVE).length,
+    partial: ads.filter((a) => a.status === AD_STATUS.PARTIAL).length,
+    loading: ads.filter((a) => a.status === AD_STATUS.LOADING).length,
+    soldOut: ads.filter((a) => a.status === AD_STATUS.SOLD_OUT).length,
+    inactive: ads.filter((a) => a.status === AD_STATUS.INACTIVE).length,
+    closed: ads.filter((a) => a.status === AD_STATUS.CLOSED).length,
+    dock: {
+      total: ads.filter((a) => a.location === "dock").length,
+      active: ads.filter(
+        (a) => a.location === "dock" && ACTIVE_STATUSES.includes(a.status)
+      ).length,
+    },
+    yard: {
+      total: ads.filter((a) => a.location === "yard").length,
+      active: ads.filter(
+        (a) => a.location === "yard" && ACTIVE_STATUSES.includes(a.status)
+      ).length,
+    },
+  };
 }
 
 // ============ الحجوزات ============
@@ -278,7 +384,7 @@ export async function createAdReservation(payload, user) {
     location: payload.location,
     items: items.map((it) => ({
       category: it.category,
-      saleType: it.saleType || "ton",   // ← جديد
+      saleType: it.saleType || "ton",
       qty: Number(it.qty || 0),
       unitPrice: Number(it.unitPrice || 0),
       subtotal: Number(it.subtotal || 0),
