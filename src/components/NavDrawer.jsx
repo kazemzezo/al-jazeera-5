@@ -76,7 +76,6 @@ export default function NavDrawer() {
     }
   }
 
-  // قفل تمرير الصفحة + إغلاق بمفتاح Escape
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -146,7 +145,9 @@ export default function NavDrawer() {
 
               <div className={`drawer-sublist ${sectionsOpen ? "open" : ""}`}>
                 <DrawerLink onClick={() => go("/dock")}>الرصيف البحري</DrawerLink>
-<DrawerLink onClick={() => go("/yard")}>ساحة الجزيره</DrawerLink>
+                <DrawerLink onClick={() => go("/yard")}>ساحة الجزيره</DrawerLink>
+                <DrawerLink onClick={() => go("/calculator")}>🧪 أداة الحساب (تجربة)</DrawerLink>
+
                 {(role === ROLES.ADMIN || isPrimaryAdmin) && (
                   <DrawerLink onClick={() => go("/admin")}>لوحة الإدمن</DrawerLink>
                 )}
