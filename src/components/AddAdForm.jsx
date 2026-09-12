@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { TON_CATEGORIES, LOCATIONS } from "../lib/catalog";
+import { useEffect, useMemo, useState } from "react";
+import { LOCATIONS, SALE_TYPES, SALE_TYPES_LABELS, SALE_TYPE_UNIT } from "../lib/catalog";
 import { createAd, updateAd } from "../lib/ads";
+import { subscribeAllCategories } from "../lib/categories";
 import { useAuth } from "../context/AuthContext";
 
 export default function AddAdForm({ onClose, defaultLocation, ad }) {
@@ -17,31 +18,71 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
     if (ad?.items && ad.items.length > 0) {
       return ad.items.map((it) => ({
         category: it.category,
+        saleType: it.saleType || SALE_TYPES.TON,
         qty: String(it.qty ?? "1"),
         unitPrice: String(it.unitPrice ?? "0"),
         reservedQty: Number(it.reservedQty || 0),
       }));
     }
-    return [
-      {
-        category: TON_CATEGORIES[0],
-        qty: "1",
-        unitPrice: "0",
-        reservedQty: 0,
-      },
-    ];
+    return [];
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [imageError, setImageError] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [loadingCats, setLoadingCats] = useState(true);
 
+  // قراءة الأصناف من Firebase
+  useEffect(() => {
+    const unsub = subscribeAllCategories(
+      (items) => {
+        setCategories(items);
+        setLoadingCats(false);
+      },
+      (err) => {
+        console.error("فشل تحميل الأصناف:", err);
+        setLoadingCats(false);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // الأصناف مفلترة حسب نوع البيع
+  const categoriesByType = useMemo(() => {
+    const map = {
+      [SALE_TYPES.TON]: [],
+      [SALE_TYPES.PIECE]: [],
+      [SALE_TYPES.DEAL]: [],
+    };
+    categories.forEach((c) => {
+      if (map[c.saleType]) map[c.saleType].push(c);
+    });
+    return map;
+  }, [categories]);
+
+  const used = items.map((i) => `${i.category}|${i.saleType}`);
+
+  // إضافة صنف جديد (أول واحد متاح من أي نوع)
   function addItem() {
-    const used = items.map((i) => i.category);
-    const next =
-      TON_CATEGORIES.find((c) => !used.includes(c)) || TON_CATEGORIES[0];
+    const all = [
+      ...categoriesByType[SALE_TYPES.TON],
+      ...categoriesByType[SALE_TYPES.PIECE],
+      ...categoriesByType[SALE_TYPES.DEAL],
+    ];
+    const firstFree = all.find(
+      (c) => !used.includes(`${c.name}|${c.saleType}`)
+    );
+    if (!firstFree) return;
+
     setItems([
       ...items,
-      { category: next, qty: "1", unitPrice: "0", reservedQty: 0 },
+      {
+        category: firstFree.name,
+        saleType: firstFree.saleType,
+        qty: "1",
+        unitPrice: "0",
+        reservedQty: 0,
+      },
     ]);
   }
 
@@ -55,12 +96,26 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
     );
   }
 
+  // لما تغيّر الصنف → نحدّث نوع البيع تلقائياً
+  function changeCategory(idx, catName, catSaleType) {
+    setItems(
+      items.map((it, i) =>
+        i === idx
+          ? {
+              ...it,
+              category: catName,
+              saleType: catSaleType,
+              qty: catSaleType === SALE_TYPES.DEAL ? "1" : it.qty,
+            }
+          : it
+      )
+    );
+  }
+
   const total = items.reduce(
     (s, it) => s + Number(it.qty || 0) * Number(it.unitPrice || 0),
     0
   );
-
-  const totalTons = items.reduce((s, it) => s + Number(it.qty || 0), 0);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -70,27 +125,30 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
     if (items.length === 0) return setError("أضف صنف واحد على الأقل");
 
     for (const it of items) {
+      if (!it.category) return setError("اختار صنف لكل سطر");
       if (Number(it.qty) <= 0)
         return setError(`الكمية غير صحيحة في: ${it.category}`);
       if (Number(it.unitPrice) <= 0)
         return setError(`السعر غير صحيح في: ${it.category}`);
 
-      // في وضع التعديل: الكمية الجديدة مايقلّش عن المحجوز
       if (isEdit && Number(it.qty) < Number(it.reservedQty || 0)) {
         return setError(
-          `الكمية في "${it.category}" أقل من المحجوز (${it.reservedQty} طن). لازم تكون مساوية أو أكبر.`
+          `الكمية في "${it.category}" أقل من المحجوز (${it.reservedQty}). لازم تكون مساوية أو أكبر.`
         );
       }
     }
 
-    const cats = items.map((i) => i.category);
-    const dups = cats.filter((c, i) => cats.indexOf(c) !== i);
-    if (dups.length > 0) return setError(`الصنف "${dups[0]}" مكرر`);
+    const dups = used.filter((c, i) => used.indexOf(c) !== i);
+    if (dups.length > 0) {
+      const [name] = dups[0].split("|");
+      return setError(`الصنف "${name}" مكرر`);
+    }
 
     setSaving(true);
     try {
       const newItems = items.map((it) => ({
         category: it.category,
+        saleType: it.saleType,
         qty: Number(it.qty),
         unitPrice: Number(it.unitPrice),
         reservedQty: Number(it.reservedQty || 0),
@@ -143,7 +201,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
             </h2>
             <p className="adf-subtitle">
               {isEdit
-                ? "عدّل البيانات واضغط حفظ. الأصناف المحجوزة مش هتقل."
+                ? "عدّل البيانات واضغط حفظ."
                 : "املأ بيانات الإعلان. الأصناف هتكون قابلة للحجز من التجار الموثقين."}
             </p>
           </div>
@@ -181,7 +239,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
 
           <Field
             label="رابط الصورة"
-            hint="URL مباشر للصورة (اختياري). لو مش موجود، هنعرض صورة افتراضية."
+            hint="URL مباشر للصورة (اختياري)."
           >
             <input
               className="input"
@@ -225,7 +283,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                 }}
               >
                 {imageError
-                  ? "⚠️ الرابط مش شغال — هنعرض صورة افتراضية"
+                  ? "⚠️ الرابط مش شغال"
                   : "🖼️ معاينة الصورة هتظهر هنا"}
               </div>
             )}
@@ -259,107 +317,181 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                 className="btn"
                 style={{ fontSize: 12, padding: "4px 10px" }}
                 onClick={addItem}
-                disabled={items.length >= TON_CATEGORIES.length}
+                disabled={
+                  loadingCats ||
+                  items.length >= categories.length
+                }
               >
                 + إضافة صنف
               </button>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {items.map((it, idx) => (
-                <div key={idx}>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 80px 90px 32px",
-                      gap: 6,
-                      alignItems: "center",
-                    }}
-                  >
-                    <select
-                      className="input"
-                      value={it.category}
-                      onChange={(e) =>
-                        updateItem(idx, "category", e.target.value)
-                      }
-                      style={{ fontSize: 13 }}
-                    >
-                      {TON_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="input"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={it.qty}
-                      onChange={(e) => updateItem(idx, "qty", e.target.value)}
-                      placeholder="طن"
-                      style={{ textAlign: "center", fontSize: 13 }}
-                    />
-                    <input
-                      className="input"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={it.unitPrice}
-                      onChange={(e) =>
-                        updateItem(idx, "unitPrice", e.target.value)
-                      }
-                      placeholder="ج/طن"
-                      style={{ textAlign: "center", fontSize: 13 }}
-                    />
-                    {items.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => removeItem(idx)}
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          border: "1.5px solid var(--line-strong)",
-                          background: "transparent",
-                          color: "var(--danger)",
-                          cursor: "pointer",
-                          fontSize: 12,
-                          fontWeight: 700,
-                        }}
-                        aria-label="حذف الصنف"
-                      >
-                        ✕
-                      </button>
-                    ) : (
-                      <span />
-                    )}
-                  </div>
-                  {isEdit && Number(it.reservedQty || 0) > 0 && (
-                    <p
+            {loadingCats ? (
+              <p style={{ fontSize: 13, color: "var(--steel)" }}>
+                جاري تحميل الأصناف...
+              </p>
+            ) : categories.length === 0 ? (
+              <div
+                style={{
+                  padding: 14,
+                  background: "var(--crane-light)",
+                  border: "1px solid var(--crane)",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  lineHeight: 1.7,
+                }}
+              >
+                ⚠️ مفيش أصناف. اطلب من الأدمن يضيف أصناف من تاب **"📋
+                الأصناف"** أولاً.
+              </div>
+            ) : items.length === 0 ? (
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "var(--steel)",
+                  margin: 0,
+                }}
+              >
+                دوس **"+ إضافة صنف"** لبدء إضافة الأصناف.
+              </p>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                {items.map((it, idx) => {
+                  const isDeal = it.saleType === SALE_TYPES.DEAL;
+                  const availableCats = categoriesByType[it.saleType] || [];
+
+                  return (
+                    <div
+                      key={idx}
                       style={{
-                        fontSize: 11,
-                        color: "var(--crane)",
-                        margin: "4px 0 0 4px",
+                        padding: 10,
+                        background: "var(--paper-sunken)",
+                        borderRadius: 10,
+                        border: "1px solid var(--line)",
                       }}
                     >
-                      ⚠️ محجوز حالياً: {it.reservedQty} طن — الكمية الجديدة
-                      لازم تكون ≥ {it.reservedQty}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 80px 90px 32px",
+                          gap: 6,
+                          alignItems: "center",
+                        }}
+                      >
+                        <select
+                          className="input"
+                          value={it.category}
+                          onChange={(e) => {
+                            const cat = availableCats.find(
+                              (c) => c.name === e.target.value
+                            );
+                            if (cat)
+                              changeCategory(idx, cat.name, cat.saleType);
+                          }}
+                          style={{ fontSize: 13 }}
+                        >
+                          {availableCats.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={it.qty}
+                          onChange={(e) =>
+                            updateItem(idx, "qty", e.target.value)
+                          }
+                          placeholder="0"
+                          disabled={isDeal}
+                          style={{
+                            textAlign: "center",
+                            fontSize: 13,
+                            opacity: isDeal ? 0.6 : 1,
+                          }}
+                        />
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={it.unitPrice}
+                          onChange={(e) =>
+                            updateItem(idx, "unitPrice", e.target.value)
+                          }
+                          placeholder="0"
+                          style={{ textAlign: "center", fontSize: 13 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            border: "1.5px solid var(--line-strong)",
+                            background: "transparent",
+                            color: "var(--danger)",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                          aria-label="حذف الصنف"
+                        >
+                          ✕
+                        </button>
+                      </div>
 
-            <p
-              style={{
-                fontSize: 11.5,
-                color: "var(--steel-light)",
-                margin: "6px 0 0",
-              }}
-            >
-              الترتيب: (الصنف) — (الكمية بالطن) — (السعر للطن)
-            </p>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          display: "flex",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          fontSize: 11.5,
+                          color: "var(--steel)",
+                        }}
+                      >
+                        <span style={saleTypeBadge(it.saleType)}>
+                          {SALE_TYPES_LABELS[it.saleType]}
+                        </span>
+                        <span>
+                          الوحدة: {SALE_TYPE_UNIT[it.saleType]}
+                        </span>
+                        {isDeal && (
+                          <span style={{ color: "var(--crane)" }}>
+                            🔒 السعر والكمية للقراءة فقط — التاجر مايقدرش
+                            يعدّلهم
+                          </span>
+                        )}
+                      </div>
+
+                      {isEdit && Number(it.reservedQty || 0) > 0 && (
+                        <p
+                          style={{
+                            fontSize: 11,
+                            color: "var(--crane)",
+                            margin: "4px 0 0",
+                          }}
+                        >
+                          ⚠️ محجوز: {it.reservedQty} — الكمية الجديدة لازم ≥{" "}
+                          {it.reservedQty}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div
               style={{
@@ -367,37 +499,14 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                 paddingTop: 10,
                 borderTop: "1px dashed var(--line)",
                 display: "flex",
-                flexDirection: "column",
-                gap: 4,
+                justifyContent: "space-between",
                 fontSize: 13,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span style={{ color: "var(--steel)" }}>
-                  إجمالي الأطنان:
-                </span>
-                <span style={{ fontWeight: 700 }}>
-                  {totalTons.toLocaleString("ar-EG")} طن
-                </span>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span style={{ color: "var(--steel)" }}>
-                  القيمة المتوقعة:
-                </span>
-                <span style={{ fontWeight: 900, fontSize: 15 }}>
-                  {total.toLocaleString("ar-EG")}ج
-                </span>
-              </div>
+              <span style={{ color: "var(--steel)">القيمة المتوقعة:</span>
+              <span style={{ fontWeight: 900, fontSize: 15 }}>
+                {total.toLocaleString("ar-EG")}ج
+              </span>
             </div>
           </div>
 
@@ -415,7 +524,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={saving}
+              disabled={saving || items.length === 0}
             >
               {saving
                 ? "جاري الحفظ..."
@@ -451,7 +560,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
           border-radius: 16px;
           padding: 24px;
           width: 100%;
-          max-width: 540px;
+          max-width: 560px;
           box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
           animation: adf-pop .25s cubic-bezier(0.22, 0.61, 0.36, 1);
           max-height: 90vh;
@@ -552,4 +661,30 @@ function Field({ label, required, hint, children }) {
       )}
     </div>
   );
+}
+
+function saleTypeBadge(saleType) {
+  const base = {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "2px 8px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 700,
+  };
+  if (saleType === SALE_TYPES.TON)
+    return {
+      ...base,
+      background: "var(--kabbash-light)",
+      color: "var(--kabbash)",
+    };
+  if (saleType === SALE_TYPES.PIECE)
+    return { ...base, background: "var(--crane-light)", color: "var(--crane)" };
+  if (saleType === SALE_TYPES.DEAL)
+    return {
+      ...base,
+      background: "var(--paper-raised)",
+      color: "var(--steel)",
+    };
+  return base;
 }
