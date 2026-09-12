@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import Dock from "./pages/Dock";
 import Yard from "./pages/Yard";
 import AdDetails from "./pages/AdDetails";
+import Calculator from "./pages/Calculator";
 import AdminPanel from "./pages/AdminPanel";
 import SupervisorPanel from "./pages/SupervisorPanel";
 import DriverPanel from "./pages/DriverPanel";
@@ -30,6 +31,7 @@ export default function App() {
                 <Route path="/dock" element={<Dock />} />
                 <Route path="/yard" element={<Yard />} />
                 <Route path="/ads/:id" element={<AdDetails />} />
+                <Route path="/calculator" element={<Calculator />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/guide" element={<Guide />} />
