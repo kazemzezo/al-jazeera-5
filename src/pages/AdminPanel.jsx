@@ -39,7 +39,7 @@ import {
 } from "../lib/users";
 import InvoiceView from "../components/InvoiceView";
 import AddAdForm from "../components/AddAdForm";
-
+import AdminCategoriesTab from "../components/AdminCategoriesTab";
 export default function AdminPanel() {
   const { user, isPrimaryAdmin } = useAuth();
   const [tab, setTab] = useState("reservations");
@@ -75,6 +75,9 @@ export default function AdminPanel() {
         <Pill active={tab === "ads"} onClick={() => setTab("ads")}>
           الإعلانات
         </Pill>
+        <Pill active={tab === "categories"} onClick={() => setTab("categories")}>
+  📋 الأصناف
+</Pill>
         {isPrimaryAdmin && (
           <Pill active={tab === "users"} onClick={() => setTab("users")}>
             🔐 المستخدمين
@@ -105,6 +108,7 @@ export default function AdminPanel() {
 
       {tab === "reservations" && <ReservationsTab uid={user.uid} />}
       {tab === "ads" && <AdsTab uid={user.uid} />}
+      {tab === "categories" && <AdminCategoriesTab />}
       {tab === "users" && isPrimaryAdmin && <UsersTab adminUid={user.uid} />}
       {tab === "verification" && <VerificationTab />}
       {tab === "announcements" && <AnnouncementsTab />}
