@@ -1,4 +1,28 @@
-// أصناف تباع بالطن (لها سعر موحد باليومية يظهر في شريط الأسعار)
+// ============================================
+// catalog.js — تصنيفات الأصناف وأنواع البيع
+// ============================================
+
+// أنواع البيع
+export const SALE_TYPES = {
+  TON: "ton",       // يُباع بالطن
+  PIECE: "piece",   // يُباع بالعدد
+  DEAL: "deal",     // صفقة (سعر ثابت، كمية غير قابلة للتعديل)
+};
+
+export const SALE_TYPES_LABELS = {
+  [SALE_TYPES.TON]: "بالطن",
+  [SALE_TYPES.PIECE]: "بالعدد",
+  [SALE_TYPES.DEAL]: "صفقة",
+};
+
+// الوحدات المقترحة لكل نوع
+export const SALE_TYPE_UNIT = {
+  [SALE_TYPES.TON]: "طن",
+  [SALE_TYPES.PIECE]: "قطعة",
+  [SALE_TYPES.DEAL]: "صفقة",
+};
+
+// الأصناف الافتراضية (Fallback — بتُستخدم لحد ما الأدمن يضيف أصنافه)
 export const TON_CATEGORIES = [
   "حديد",
   "نحاس",
@@ -11,7 +35,6 @@ export const TON_CATEGORIES = [
   "قطع غيار مختلفه",
 ];
 
-// أصناف تباع بنظام لوط (سعر إجمالي ثابت لكل لوط يحدده الأدمن عند الإضافة)
 export const LOT_CATEGORIES = [
   "اجهزه كهربائيه",
   "معدات بحريه",
@@ -24,7 +47,6 @@ export const LOT_CATEGORIES = [
   "ألواح صاج",
 ];
 
-// أصناف تباع بالقطعة (سعر ثابت للقطعة يحدده الأدمن)
 export const PIECE_CATEGORIES = [
   "تانكات سعة 1000 لتر",
   "براميل سعة 200 لتر",
@@ -32,22 +54,17 @@ export const PIECE_CATEGORIES = [
   "كاوتش سيارات 70%",
 ];
 
-export const SALE_TYPES = {
-  TON: "ton",
-  LOT: "lot",
-  PIECE: "piece",
-};
-
 export function categoriesForSaleType(saleType) {
   if (saleType === SALE_TYPES.TON) return TON_CATEGORIES;
-  if (saleType === SALE_TYPES.LOT) return LOT_CATEGORIES;
   if (saleType === SALE_TYPES.PIECE) return PIECE_CATEGORIES;
+  if (saleType === SALE_TYPES.DEAL) return LOT_CATEGORIES;
   return [];
 }
 
+// المواقع
 export const LOCATIONS = {
-  DOCK: "dock", // الرصيف البحري
-  YARD: "yard", // ساحة الجزيره
+  DOCK: "dock",
+  YARD: "yard",
 };
 
 export const SITE_MAINTENANCE_FEE = {
