@@ -8,7 +8,12 @@ import {
   getAvailableItems,
   isAdReservable,
 } from "../lib/ads";
-import { LOCATIONS } from "../lib/catalog";
+import {
+  LOCATIONS,
+  SALE_TYPES,
+  SALE_TYPES_LABELS,
+  SALE_TYPE_UNIT,
+} from "../lib/catalog";
 import { useAuth } from "../context/AuthContext";
 import { useGuestPrompt } from "../context/GuestPromptContext";
 import { canReserve as canReserveRole } from "../lib/roles";
@@ -144,6 +149,10 @@ export default function AdDetails() {
               const avail = Number(it.qty || 0) - Number(it.reservedQty || 0);
               const itemTotal = Number(it.qty) * Number(it.unitPrice);
               const soldOut = avail <= 0;
+              const type = it.saleType || SALE_TYPES.TON;
+              const unit = SALE_TYPE_UNIT[type] || "طن";
+              const isDeal = type === SALE_TYPES.DEAL;
+
               return (
                 <div
                   key={i}
@@ -152,16 +161,21 @@ export default function AdDetails() {
                   }
                 >
                   <div className="item-info">
-                    <span className="item-category">{it.category}</span>
+                    <span className="item-category">
+                      {it.category}
+                      {isDeal && (
+                        <span className="item-type-tag">صفقة</span>
+                      )}
+                    </span>
                     <span className="item-available">
                       {soldOut
                         ? "نفذت الكمية"
-                        : `متاح: ${avail} من ${it.qty} طن`}
+                        : `متاح: ${avail} من ${it.qty} ${unit}`}
                     </span>
                   </div>
                   <div className="item-price">
                     <span className="item-unit">
-                      {Number(it.unitPrice).toLocaleString("ar-EG")}ج/طن
+                      {Number(it.unitPrice).toLocaleString("ar-EG")}ج/{unit}
                     </span>
                     <span className="item-total">
                       {itemTotal.toLocaleString("ar-EG")}ج
@@ -311,7 +325,21 @@ export default function AdDetails() {
           gap: 2px;
           min-width: 120px;
         }
-        .item-category { font-weight: 700; font-size: 14px; }
+        .item-category {
+          font-weight: 700;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .item-type-tag {
+          font-size: 10.5px;
+          font-weight: 700;
+          background: var(--paper-raised);
+          color: var(--steel);
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
         .item-available { font-size: 12px; color: var(--steel); }
         .item-price {
           display: flex;
