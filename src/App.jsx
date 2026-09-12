@@ -33,6 +33,7 @@ export default function App() {
                 <Route path="/yard" element={<Yard />} />
                 <Route path="/ads/:id" element={<AdDetails />} />
                 <Route path="/calculator" element={<Calculator />} />
+                <Route path="/experimental" element={<Experimental />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/guide" element={<Guide />} />
