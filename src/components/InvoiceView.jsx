@@ -1,4 +1,4 @@
-import { LOCATIONS } from "../lib/catalog";
+import { LOCATIONS, SALE_TYPES, SALE_TYPE_UNIT } from "../lib/catalog";
 
 function fmt(n) {
   return Number(n || 0).toLocaleString("ar-EG") + "ج";
@@ -156,7 +156,7 @@ function CalculatorContent({ invoice }) {
             <Line
               label={`تحميل ${invoice.loadingTons} طن × ${fmt(
                 invoice.loadingPricePerTon
-              )}${invoice.workerCount > 0 ? ` (${invoice.workerCount} عامل)` : ""}`}
+              )}`}
               value={invoice.loadingTotal}
             />
           )}
@@ -175,7 +175,7 @@ function CalculatorContent({ invoice }) {
   );
 }
 
-// ✅ جديد: عرض حجز إعلان الرصيف
+// ✅ محدّث: يعرض الوحدة الصح + بيحسب الإجمالي
 function AdContent({ invoice }) {
   const items = invoice.items || [];
   const equipment = invoice.equipment || [];
@@ -201,38 +201,50 @@ function AdContent({ invoice }) {
 
       {items.length > 0 && (
         <Group title="الأصناف">
-          {items.map((r, i) => (
-            <InvoiceLine
-              key={i}
-              label={`${r.category} - ${r.qty} طن × ${fmt(r.unitPrice)}`}
-              value={r.subtotal}
-            />
-          ))}
+          {items.map((r, i) => {
+            const unit = SALE_TYPE_UNIT[r.saleType] || "طن";
+            const subtotal =
+              r.subtotal ?? Number(r.qty || 0) * Number(r.unitPrice || 0);
+            const isDeal = r.saleType === SALE_TYPES.DEAL;
+            return (
+              <Line
+                key={i}
+                label={`${r.category} - ${r.qty} ${unit} × ${fmt(
+                  r.unitPrice
+                )}${isDeal ? " (صفقة)" : ""}`}
+                value={subtotal}
+              />
+            );
+          })}
         </Group>
       )}
 
       {equipment.length > 0 && (
         <Group title="المعدات">
-          {equipment.map((r, i) => (
-            <InvoiceLine
-              key={i}
-              label={`${r.name} - ${r.hours} ساعة × ${fmt(r.pricePerHour)}`}
-              value={r.subtotal}
-            />
-          ))}
+          {equipment.map((r, i) => {
+            const subtotal =
+              r.subtotal ?? Number(r.hours || 0) * Number(r.pricePerHour || 0);
+            return (
+              <Line
+                key={i}
+                label={`${r.name} - ${r.hours} ساعة × ${fmt(r.pricePerHour)}`}
+                value={subtotal}
+              />
+            );
+          })}
         </Group>
       )}
 
       {(workerCount > 0 || carCount > 0) && (
         <Group title="عمالة وسيارات">
           {workerCount > 0 && (
-            <InvoiceLine
+            <Line
               label={`عمال (${workerCount} × ${fmt(invoice.workerUnitPrice)})`}
               value={invoice.workersTotal}
             />
           )}
           {carCount > 0 && (
-            <InvoiceLine
+            <Line
               label={`سيارات (${carCount} × ${fmt(invoice.carUnitPrice)})`}
               value={invoice.carsTotal}
             />
@@ -244,12 +256,11 @@ function AdContent({ invoice }) {
 }
 
 function ListingContent({ invoice }) {
+  const unit = SALE_TYPE_UNIT[invoice.saleType] || "طن";
   const qtyLabel =
-    invoice.saleType === "lot"
-      ? "لوط كامل"
-      : invoice.saleType === "piece"
-      ? `${invoice.qty} قطعة`
-      : `${invoice.qty} طن`;
+    invoice.saleType === SALE_TYPES.DEAL
+      ? `${invoice.qty} صفقة`
+      : `${invoice.qty} ${unit}`;
 
   return (
     <Group title="تفاصيل الحجز">
@@ -285,34 +296,27 @@ function Group({ title, children }) {
   );
 }
 
-function InvoiceLine({ label, value }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        fontSize: 13,
-        padding: "4px 0",
-      }}
-    >
-      <span>{label}</span>
-      <span style={{ fontWeight: 700 }}>{fmt(value)}</span>
-    </div>
-  );
-}
-
 function Line({ label, value }) {
   return (
     <div
       style={{
         display: "flex",
         justifyContent: "space-between",
+        alignItems: "center",
         fontSize: 13,
-        padding: "4px 0",
+        padding: "6px 0",
+        gap: 12,
+        borderBottom: "1px solid var(--line)",
       }}
     >
-      <span>{label}</span>
-      {value !== "" && <span style={{ fontWeight: 700 }}>{fmt(value)}</span>}
+      <span style={{ flex: 1 }}>{label}</span>
+      {value !== "" && value !== undefined && value !== null ? (
+        <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+          {fmt(value)}
+        </span>
+      ) : (
+        <span />
+      )}
     </div>
   );
 }
