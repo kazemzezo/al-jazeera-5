@@ -10,6 +10,7 @@ import Dock from "./pages/Dock";
 import Yard from "./pages/Yard";
 import AdDetails from "./pages/AdDetails";
 import Calculator from "./pages/Calculator";
+import Experimental from "./pages/Experimental";
 import AdminPanel from "./pages/AdminPanel";
 import SupervisorPanel from "./pages/SupervisorPanel";
 import DriverPanel from "./pages/DriverPanel";
