@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { LOCATIONS, SALE_TYPES, SALE_TYPES_LABELS, SALE_TYPE_UNIT } from "../lib/catalog";
+import {
+  LOCATIONS,
+  SALE_TYPES,
+  SALE_TYPES_LABELS,
+  SALE_TYPE_UNIT,
+} from "../lib/catalog";
 import { createAd, updateAd } from "../lib/ads";
 import { subscribeAllCategories } from "../lib/categories";
 import { useAuth } from "../context/AuthContext";
@@ -32,7 +37,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
   const [categories, setCategories] = useState([]);
   const [loadingCats, setLoadingCats] = useState(true);
 
-  // قراءة الأصناف من Firebase
+  // قراءة الأصناف
   useEffect(() => {
     const unsub = subscribeAllCategories(
       (items) => {
@@ -47,7 +52,6 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
     return () => unsub();
   }, []);
 
-  // الأصناف مفلترة حسب نوع البيع
   const categoriesByType = useMemo(() => {
     const map = {
       [SALE_TYPES.TON]: [],
@@ -60,17 +64,18 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
     return map;
   }, [categories]);
 
-  const used = items.map((i) => `${i.category}|${i.saleType}`);
+  const usedKeys = items.map((i) => `${i.category}|${i.saleType}`);
 
-  // إضافة صنف جديد (أول واحد متاح من أي نوع)
+  // إضافة صنف جديد — يبدأ بالطن كافتراضي
   function addItem() {
+    // اختار أول صنف غير مستخدم (بيدور من أول نوع لآخر نوع)
     const all = [
       ...categoriesByType[SALE_TYPES.TON],
       ...categoriesByType[SALE_TYPES.PIECE],
       ...categoriesByType[SALE_TYPES.DEAL],
     ];
     const firstFree = all.find(
-      (c) => !used.includes(`${c.name}|${c.saleType}`)
+      (c) => !usedKeys.includes(`${c.name}|${c.saleType}`)
     );
     if (!firstFree) return;
 
@@ -91,21 +96,22 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
   }
 
   function updateItem(idx, field, value) {
-    setItems(
-      items.map((it, i) => (i === idx ? { ...it, [field]: value } : it))
-    );
+    setItems(items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
   }
 
-  // لما تغيّر الصنف → نحدّث نوع البيع تلقائياً
-  function changeCategory(idx, catName, catSaleType) {
+  // ✅ محدّث: بيتعامل مع تغيير الصنف صح
+  function changeCategoryById(idx, categoryId) {
+    const cat = categories.find((c) => c.id === categoryId);
+    if (!cat) return;
     setItems(
       items.map((it, i) =>
         i === idx
           ? {
               ...it,
-              category: catName,
-              saleType: catSaleType,
-              qty: catSaleType === SALE_TYPES.DEAL ? "1" : it.qty,
+              category: cat.name,
+              saleType: cat.saleType,
+              qty:
+                cat.saleType === SALE_TYPES.DEAL ? "1" : it.qty || "1",
             }
           : it
       )
@@ -138,7 +144,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
       }
     }
 
-    const dups = used.filter((c, i) => used.indexOf(c) !== i);
+    const dups = usedKeys.filter((c, i) => usedKeys.indexOf(c) !== i);
     if (dups.length > 0) {
       const [name] = dups[0].split("|");
       return setError(`الصنف "${name}" مكرر`);
@@ -237,10 +243,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
             />
           </Field>
 
-          <Field
-            label="رابط الصورة"
-            hint="URL مباشر للصورة (اختياري)."
-          >
+          <Field label="رابط الصورة" hint="URL مباشر (اختياري).">
             <input
               className="input"
               value={imageUrl}
@@ -279,7 +282,6 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                   justifyContent: "center",
                   color: "var(--steel-light)",
                   fontSize: 13,
-                  gap: 8,
                 }}
               >
                 {imageError
@@ -317,10 +319,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                 className="btn"
                 style={{ fontSize: 12, padding: "4px 10px" }}
                 onClick={addItem}
-                disabled={
-                  loadingCats ||
-                  items.length >= categories.length
-                }
+                disabled={loadingCats || items.length >= categories.length}
               >
                 + إضافة صنف
               </button>
@@ -345,26 +344,25 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                 الأصناف"** أولاً.
               </div>
             ) : items.length === 0 ? (
-              <p
-                style={{
-                  fontSize: 13,
-                  color: "var(--steel)",
-                  margin: 0,
-                }}
-              >
+              <p style={{ fontSize: 13, color: "var(--steel)", margin: 0 }}>
                 دوس **"+ إضافة صنف"** لبدء إضافة الأصناف.
               </p>
             ) : (
               <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
               >
                 {items.map((it, idx) => {
                   const isDeal = it.saleType === SALE_TYPES.DEAL;
-                  const availableCats = categoriesByType[it.saleType] || [];
+                  // ✅ قايمة الأصناف المتاحة: اللي في نفس saleType أو اللي مش مستخدمة
+                  const availableCats = categories.filter((c) => {
+                    // لو نفس السطر الحالي → اعرضه
+                    if (c.name === it.category) return true;
+                    // لو نفس النوع → اعرضه لو مش مستخدم في سطر تاني
+                    const key = `${c.name}|${c.saleType}`;
+                    return !usedKeys.some(
+                      (u, ui) => u === key && ui !== idx
+                    );
+                  });
 
                   return (
                     <div
@@ -391,16 +389,29 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                             const cat = availableCats.find(
                               (c) => c.name === e.target.value
                             );
-                            if (cat)
-                              changeCategory(idx, cat.name, cat.saleType);
+                            if (cat) changeCategoryById(idx, cat.id);
                           }}
                           style={{ fontSize: 13 }}
                         >
-                          {availableCats.map((c) => (
-                            <option key={c.id} value={c.name}>
-                              {c.name}
-                            </option>
-                          ))}
+                          {/* خيارات مجمّعة حسب النوع */}
+                          {Object.values(SALE_TYPES).map((type) => {
+                            const catsOfType = availableCats.filter(
+                              (c) => c.saleType === type
+                            );
+                            if (catsOfType.length === 0) return null;
+                            return (
+                              <optgroup
+                                key={type}
+                                label={`— ${SALE_TYPES_LABELS[type]} —`}
+                              >
+                                {catsOfType.map((c) => (
+                                  <option key={c.id} value={c.name}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            );
+                          })}
                         </select>
                         <input
                           className="input"
@@ -445,7 +456,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                             fontSize: 12,
                             fontWeight: 700,
                           }}
-                          aria-label="حذف الصنف"
+                          aria-label="حذف"
                         >
                           ✕
                         </button>
@@ -464,13 +475,10 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                         <span style={saleTypeBadge(it.saleType)}>
                           {SALE_TYPES_LABELS[it.saleType]}
                         </span>
-                        <span>
-                          الوحدة: {SALE_TYPE_UNIT[it.saleType]}
-                        </span>
+                        <span>الوحدة: {SALE_TYPE_UNIT[it.saleType]}</span>
                         {isDeal && (
                           <span style={{ color: "var(--crane)" }}>
-                            🔒 السعر والكمية للقراءة فقط — التاجر مايقدرش
-                            يعدّلهم
+                            🔒 السعر والكمية للقراءة فقط
                           </span>
                         )}
                       </div>
@@ -503,7 +511,8 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                 fontSize: 13,
               }}
             >
-<span style={{ color: "var(--steel)" }}>القيمة المتوقعة:</span>              <span style={{ fontWeight: 900, fontSize: 15 }}>
+              <span style={{ color: "var(--steel)" }}>القيمة المتوقعة:</span>
+              <span style={{ fontWeight: 900, fontSize: 15 }}>
                 {total.toLocaleString("ar-EG")}ج
               </span>
             </div>
@@ -550,8 +559,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
           animation: adf-fade .2s ease;
         }
         @keyframes adf-fade {
-          from { opacity: 0 }
-          to { opacity: 1 }
+          from { opacity: 0 } to { opacity: 1 }
         }
         .adf-modal {
           background: var(--paper-raised);
