@@ -1,5 +1,5 @@
 // ============================================
-// نظام الإعلانات (الرصيف البحري)
+// نظام الإعلانات
 // ============================================
 
 import {
@@ -104,9 +104,11 @@ export function subscribeAd(id, callback, onError) {
 
 // ============ كتابة ============
 
+// ✅ محدّث: بيحفظ saleType
 export async function createAd(ad, user) {
   const items = (ad.items || []).map((it) => ({
     category: it.category,
+    saleType: it.saleType || "ton",   // ← جديد
     qty: Number(it.qty || 0),
     unitPrice: Number(it.unitPrice || 0),
     reservedQty: 0,
@@ -126,9 +128,22 @@ export async function createAd(ad, user) {
   return ref.id;
 }
 
+// ✅ محدّث: بيتأكد إن saleType محفوظ
 export async function updateAd(id, updates, uid) {
+  const cleanUpdates = { ...updates };
+
+  if (cleanUpdates.items) {
+    cleanUpdates.items = cleanUpdates.items.map((it) => ({
+      category: it.category,
+      saleType: it.saleType || "ton",   // ← جديد
+      qty: Number(it.qty || 0),
+      unitPrice: Number(it.unitPrice || 0),
+      reservedQty: Number(it.reservedQty || 0),
+    }));
+  }
+
   await updateDoc(doc(db, "ads", id), {
-    ...updates,
+    ...cleanUpdates,
     updatedAt: serverTimestamp(),
     updatedBy: uid,
   });
@@ -245,19 +260,15 @@ export function getAvailableItems(ad) {
 
 // ============ الحجوزات ============
 
-// ✅ النسخة النهائية: إنشاء الحجز + خصم الكمية من الإعلان
-// + توليد invoiceId + date واضحين
 export async function createAdReservation(payload, user) {
   const items = (payload.items || []).filter((it) => Number(it.qty) > 0);
   const equipment = (payload.equipment || []).filter(
     (eq) => Number(eq.hours) > 0
   );
 
-  // توليد رقم فاتورة نظيف
   const invoiceId = "AJ5-" + Date.now().toString().slice(-8);
   const date = new Date().toLocaleDateString("ar-EG");
 
-  // 1. أنشئ الحجز
   const ref = await addDoc(collection(db, "reservations"), {
     type: "ad",
     invoiceId,
@@ -265,7 +276,13 @@ export async function createAdReservation(payload, user) {
     adId: payload.adId,
     adTitle: payload.adTitle,
     location: payload.location,
-    items,
+    items: items.map((it) => ({
+      category: it.category,
+      saleType: it.saleType || "ton",   // ← جديد
+      qty: Number(it.qty || 0),
+      unitPrice: Number(it.unitPrice || 0),
+      subtotal: Number(it.subtotal || 0),
+    })),
     equipment,
     workerCount: Number(payload.workerCount || 0),
     workerUnitPrice: Number(payload.workerUnitPrice || 0),
@@ -283,7 +300,6 @@ export async function createAdReservation(payload, user) {
     createdAt: serverTimestamp(),
   });
 
-  // 2. خصم من الإعلان
   try {
     await applyReservationToAd(payload.adId, items);
   } catch (err) {
