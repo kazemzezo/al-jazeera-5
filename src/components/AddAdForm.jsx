@@ -503,8 +503,7 @@ export default function AddAdForm({ onClose, defaultLocation, ad }) {
                 fontSize: 13,
               }}
             >
-              <span style={{ color: "var(--steel)">القيمة المتوقعة:</span>
-              <span style={{ fontWeight: 900, fontSize: 15 }}>
+<span style={{ color: "var(--steel)" }}>القيمة المتوقعة:</span>              <span style={{ fontWeight: 900, fontSize: 15 }}>
                 {total.toLocaleString("ar-EG")}ج
               </span>
             </div>
