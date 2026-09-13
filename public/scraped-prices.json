@@ -1,0 +1,25 @@
+{
+  "lastUpdate": "2026-09-13T00:48:51.784654+00:00",
+  "source": "الصباح اليوم",
+  "status": "success",
+  "prices": [
+    {
+      "material": "حديد خردة (خليط)",
+      "price": 18000,
+      "unit": "ج/طن",
+      "pricePerKg": 18
+    },
+    {
+      "material": "حديد خردة (مميز)",
+      "price": 20000,
+      "unit": "ج/طن",
+      "pricePerKg": 20
+    },
+    {
+      "material": "ألومنيوم خردة",
+      "price": 18000,
+      "unit": "ج/طن",
+      "pricePerKg": 18
+    }
+  ]
+}
