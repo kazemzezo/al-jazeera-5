@@ -3,13 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { deleteDoc, doc } from "firebase/firestore";
 import { deleteUser } from "firebase/auth";
 import { useAuth } from "../context/AuthContext";
-import { useGuestPrompt } from "../context/GuestPromptContext";
 import { db } from "../lib/firebase";
 import { ROLES } from "../lib/roles";
 import { subscribeMyLatestVerification } from "../lib/verification";
 import { subscribeMyReservations } from "../lib/listings";
 import InvoiceView from "../components/InvoiceView";
 import CompleteProfileForm from "../components/CompleteProfileForm";
+import VerificationRequestModal from "../components/VerificationRequestModal";
 
 const ROLE_LABELS = {
   [ROLES.ADMIN]: "أدمن",
@@ -44,18 +44,27 @@ function statusStyle(status) {
   if (status === "contacted")
     return { ...base, background: "var(--kabbash-light)", color: "var(--steel)" };
   if (status === "in_progress")
-    return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+    return {
+      ...base,
+      background: "var(--kabbash-light)",
+      color: "var(--kabbash)",
+    };
   if (status === "completed")
-    return { ...base, background: "var(--kabbash-light)", color: "var(--kabbash)" };
+    return {
+      ...base,
+      background: "var(--kabbash-light)",
+      color: "var(--kabbash)",
+    };
   if (status === "cancelled")
     return { ...base, background: "var(--danger-light)", color: "var(--danger)" };
   return base;
 }
 
-// ✅ حساب ملخص حجز الإعلان
 function getReservationTitle(r) {
   if (r.type === "calculator") {
-    return `فاتورة من الحاسبة · ${r.location === "dock" ? "الرصيف" : "الساحة"}`;
+    return `فاتورة من الحاسبة · ${
+      r.location === "dock" ? "الرصيف" : "الساحة"
+    }`;
   }
   if (r.type === "ad") {
     const itemCount = r.items?.length || 0;
@@ -65,9 +74,8 @@ function getReservationTitle(r) {
     );
     const firstCat = r.items?.[0]?.category || "";
     const extra = itemCount > 1 ? ` و${itemCount - 1} صنف آخر` : "";
-    return `${firstCat}${extra} · ${totalQty} طن`;
+    return `${firstCat}${extra} · ${totalQty}`;
   }
-  // listing
   return `${r.category} · ${r.qty} ${
     r.saleType === "lot" ? "لوط" : r.saleType === "piece" ? "قطعة" : "طن"
   }`;
@@ -75,7 +83,6 @@ function getReservationTitle(r) {
 
 export default function Profile() {
   const { user, profile, role } = useAuth();
-  const { promptVerification } = useGuestPrompt();
   const navigate = useNavigate();
   const [verification, setVerification] = useState(null);
   const [loadingVerif, setLoadingVerif] = useState(true);
@@ -85,6 +92,7 @@ export default function Profile() {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -125,10 +133,13 @@ export default function Profile() {
   }
 
   const isVerified = role === ROLES.VERIFIED_TRADER || role === ROLES.ADMIN;
+  const isAdmin = role === ROLES.ADMIN;
 
   return (
     <div style={{ maxWidth: 620 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 16 }}>حسابي</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 16 }}>
+        حسابي
+      </h1>
 
       {/* بياناتي */}
       <div
@@ -170,7 +181,7 @@ export default function Profile() {
       </div>
 
       {/* حالة التوثيق */}
-      {!isVerified ? (
+      {!isVerified && !isAdmin && (
         <div
           style={{
             background: "var(--paper-raised)",
@@ -186,10 +197,12 @@ export default function Profile() {
           <VerificationStatus
             loading={loadingVerif}
             verification={verification}
-            onRequest={() => promptVerification("")}
+            onRequest={() => setShowVerificationModal(true)}
           />
         </div>
-      ) : (
+      )}
+
+      {isVerified && (
         <div
           className="badge"
           style={{
@@ -225,7 +238,9 @@ export default function Profile() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {myReservations.map((r) => {
               const dateLabel =
-                r.createdAt?.toDate?.().toLocaleString("ar-EG") || r.date || "—";
+                r.createdAt?.toDate?.().toLocaleString("ar-EG") ||
+                r.date ||
+                "—";
               return (
                 <div
                   key={r.id}
@@ -348,8 +363,8 @@ export default function Profile() {
           حذف الحساب
         </p>
         <p style={{ fontSize: 12, color: "var(--steel)", marginBottom: 12 }}>
-          حذف حسابك نهائي وسيؤدي لمسح بياناتك بالكامل من الموقع، ولا يمكن التراجع
-          عنه.
+          حذف حسابك نهائي وسيؤدي لمسح بياناتك بالكامل من الموقع، ولا يمكن
+          التراجع عنه.
         </p>
 
         {!confirming ? (
@@ -402,13 +417,22 @@ export default function Profile() {
         )}
       </div>
 
+      {/* المودالات */}
       {editing && (
         <CompleteProfileForm forceMode onClose={() => setEditing(false)} />
+      )}
+      {showVerificationModal && (
+        <VerificationRequestModal
+          onClose={() => setShowVerificationModal(false)}
+        />
       )}
     </div>
   );
 }
 
+/* ============================================
+   حالة التوثيق
+   ============================================ */
 function VerificationStatus({ loading, verification, onRequest }) {
   if (loading) {
     return (
@@ -429,15 +453,22 @@ function VerificationStatus({ loading, verification, onRequest }) {
             lineHeight: 1.7,
           }}
         >
-          حسابك غير موثق حاليًا، وبالتالي لا يمكنك تأكيد أي حجز. أرسل طلب توثيق
-          وهيتم مراجعته من الإدارة.
+          حسابك غير موثق حاليًا، وبالتالي لا يمكنك تأكيد أي حجز. أرسل طلب
+          توثيق وهيتم مراجعته من الإدارة.
         </p>
         <button className="btn btn-primary" onClick={onRequest}>
-          أرسل طلب توثيق
+          🔑 أرسل طلب توثيق
         </button>
       </div>
     );
   }
+
+  const typeLabel =
+    verification.type === "dock"
+      ? "تاجر رصيف"
+      : verification.type === "yard"
+      ? "تاجر ساحة"
+      : "";
 
   if (verification.status === "pending") {
     return (
@@ -448,18 +479,39 @@ function VerificationStatus({ loading, verification, onRequest }) {
         >
           ⏳ طلبك تحت المراجعة
         </div>
-        <p
+        <div
           style={{
+            marginTop: 12,
             fontSize: 12.5,
             color: "var(--steel)",
-            margin: "10px 0 0",
+            lineHeight: 1.8,
           }}
         >
-          تم إرسال طلبك بتاريخ{" "}
-          {verification.createdAt?.toDate?.().toLocaleDateString("ar-EG") ||
-            "—"}{" "}
-          وسيتم إشعارك عند الرد.
-        </p>
+          {typeLabel && (
+            <p style={{ margin: "0 0 4px" }}>
+              <b>النوع:</b> {typeLabel}
+            </p>
+          )}
+          {verification.code && (
+            <p style={{ margin: "0 0 4px" }}>
+              <b>الكود:</b>{" "}
+              <span style={{ fontFamily: "monospace", fontWeight: 700 }}>
+                {verification.code}
+              </span>
+            </p>
+          )}
+          {verification.transactionId && (
+            <p style={{ margin: "0 0 4px" }}>
+              <b>رقم العملية:</b> {verification.transactionId}
+            </p>
+          )}
+          <p style={{ margin: "8px 0 0" }}>
+            تم إرسال طلبك بتاريخ{" "}
+            {verification.createdAt?.toDate?.().toLocaleDateString("ar-EG") ||
+              "—"}{" "}
+            وسيتم إشعارك عند الرد.
+          </p>
+        </div>
       </div>
     );
   }
@@ -489,7 +541,7 @@ function VerificationStatus({ loading, verification, onRequest }) {
           style={{ marginTop: 8 }}
           onClick={onRequest}
         >
-          إعادة إرسال الطلب
+          🔑 إعادة إرسال الطلب
         </button>
       </div>
     );
