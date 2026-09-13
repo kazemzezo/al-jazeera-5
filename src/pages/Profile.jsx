@@ -10,6 +10,7 @@ import { subscribeMyReservations } from "../lib/listings";
 import InvoiceView from "../components/InvoiceView";
 import CompleteProfileForm from "../components/CompleteProfileForm";
 import VerificationRequestModal from "../components/VerificationRequestModal";
+import WalletCard from "../components/WalletCard";
 
 const ROLE_LABELS = {
   [ROLES.ADMIN]: "أدمن",
@@ -179,6 +180,9 @@ export default function Profile() {
         <Row label="عنوان الشركة" value={profile?.address || "—"} />
         <Row label="نوع الحساب" value={ROLE_LABELS[role] || "—"} last />
       </div>
+
+      {/* ✅ محفظتي */}
+      {isVerified && !isAdmin && <WalletCard />}
 
       {/* حالة التوثيق */}
       {!isVerified && !isAdmin && (
