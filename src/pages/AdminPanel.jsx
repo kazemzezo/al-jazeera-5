@@ -49,6 +49,7 @@ import InvoiceView from "../components/InvoiceView";
 import AddAdForm from "../components/AddAdForm";
 import AdminCategoriesTab from "../components/AdminCategoriesTab";
 import AdminSettingsTab from "../components/AdminSettingsTab";
+import AdminWalletsTab from "../components/AdminWalletsTab";
 
 export default function AdminPanel() {
   const { user, isPrimaryAdmin } = useAuth();
@@ -88,6 +89,9 @@ export default function AdminPanel() {
         <Pill active={tab === "categories"} onClick={() => setTab("categories")}>
           📋 الأصناف
         </Pill>
+        <Pill active={tab === "wallets"} onClick={() => setTab("wallets")}>
+          💼 المحافظ
+        </Pill>
         {isPrimaryAdmin && (
           <Pill active={tab === "users"} onClick={() => setTab("users")}>
             🔐 المستخدمين
@@ -122,6 +126,7 @@ export default function AdminPanel() {
       {tab === "reservations" && <ReservationsTab uid={user.uid} />}
       {tab === "ads" && <AdsTab uid={user.uid} />}
       {tab === "categories" && <AdminCategoriesTab />}
+      {tab === "wallets" && <AdminWalletsTab />}
       {tab === "users" && isPrimaryAdmin && <UsersTab adminUid={user.uid} />}
       {tab === "verification" && <VerificationTab adminUid={user.uid} />}
       {tab === "announcements" && <AnnouncementsTab />}
@@ -1617,16 +1622,10 @@ function VerificationTab({ adminUid }) {
     setError("");
     setSuccess("");
     try {
-      // 1. اقبل الطلب (يغيّر role)
       await approveVerification(req);
 
-      // 2. أنشئ المحفظة (بتضيف المبلغ للرصيد)
       try {
-        await createWallet(
-          req.uid,
-          req.type || "dock",
-          adminUid
-        );
+        await createWallet(req.uid, req.type || "dock", adminUid);
         setSuccess(`✅ تم توثيق ${req.name || req.email} وإنشاء محفظته`);
       } catch (walletErr) {
         console.error("فشل إنشاء المحفظة:", walletErr);
@@ -1792,7 +1791,6 @@ function VerificationTab({ adminUid }) {
                       </p>
                     )}
 
-                    {/* بيانات الدفع */}
                     {req.type && (
                       <div
                         style={{
@@ -1826,7 +1824,10 @@ function VerificationTab({ adminUid }) {
                           <div>
                             <b>رقم العملية:</b>{" "}
                             <span
-                              style={{ fontFamily: "monospace", fontWeight: 700 }}
+                              style={{
+                                fontFamily: "monospace",
+                                fontWeight: 700,
+                              }}
                             >
                               {req.transactionId}
                             </span>
@@ -1835,9 +1836,7 @@ function VerificationTab({ adminUid }) {
                         {req.paymentAmount > 0 && (
                           <div>
                             <b>المبلغ:</b>{" "}
-                            {Number(req.paymentAmount).toLocaleString(
-                              "ar-EG"
-                            )}
+                            {Number(req.paymentAmount).toLocaleString("ar-EG")}
                             ج
                           </div>
                         )}
