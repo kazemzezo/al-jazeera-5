@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -12,6 +13,9 @@ import {
 import { db } from "./firebase";
 import { ROLES } from "./roles";
 
+/* ============================================
+   طلب توثيق جديد
+   ============================================ */
 export async function requestVerification(user, profile, extra = {}) {
   // امنع التكرار: لو فيه طلب معلق موجود، ارمي خطأ
   const pendingQuery = query(
@@ -21,21 +25,30 @@ export async function requestVerification(user, profile, extra = {}) {
   );
   const pendingSnap = await getDocs(pendingQuery);
   if (!pendingSnap.empty) {
-    throw new Error("لديك طلب توثيق قيد المراجعة بالفعل. سيتم الرد عليك قريبًا.");
+    throw new Error(
+      "لديك طلب توثيق قيد المراجعة بالفعل. سيتم الرد عليك قريبًا."
+    );
   }
 
   await addDoc(collection(db, "verification_requests"), {
     uid: user.uid,
     email: user.email,
     name: profile?.name || user.displayName || "",
-    phone: extra.phone || "",
+    phone: extra.phone || profile?.phone || "",
     notes: extra.notes || "",
+    // الحقول الجديدة
+    type: extra.type || "dock", // dock | yard
+    code: extra.code || "", // DK-XXXXXX
+    transactionId: extra.transactionId || "",
+    paymentAmount: Number(extra.paymentAmount || 0),
     status: "pending",
     createdAt: serverTimestamp(),
   });
 }
 
-// ✅ كل الطلبات — بدون orderBy (نرتّب في المتصفح)
+/* ============================================
+   كل الطلبات (للأدمن)
+   ============================================ */
 export function subscribeAllVerifications(callback, onError) {
   return onSnapshot(
     collection(db, "verification_requests"),
@@ -52,7 +65,9 @@ export function subscribeAllVerifications(callback, onError) {
   );
 }
 
-// ✅ للتاجر: آخر طلب — بدون orderBy (نرتّب في المتصفح)
+/* ============================================
+   آخر طلب للتاجر
+   ============================================ */
 export function subscribeMyLatestVerification(uid, callback) {
   if (!uid) {
     callback(null);
@@ -80,13 +95,18 @@ export function subscribeMyLatestVerification(uid, callback) {
   );
 }
 
+/* ============================================
+   الموافقة على التوثيق
+   ملاحظة: هتتنادى من AdminPanel، ومحتاجة
+   كمان تستدعي createWallet من wallet.js
+   ============================================ */
 export async function approveVerification(request) {
   // 1. وثّق المستخدم
   await updateDoc(doc(db, "users", request.uid), {
     role: ROLES.VERIFIED_TRADER,
   });
 
-  // 2. اقفل كل الطلبات المعلقة لنفس المستخدم (مش بس ده)
+  // 2. اقفل كل الطلبات المعلقة لنفس المستخدم
   const pendingQuery = query(
     collection(db, "verification_requests"),
     where("uid", "==", request.uid),
@@ -102,15 +122,20 @@ export async function approveVerification(request) {
   await Promise.all(updates);
 }
 
-export async function rejectVerification(requestId, reason = "", uid = null) {
-  // لو التاجر موثق أصلاً، مينفعش نرفضه — بنسيب الطلب يتقفل بس
+/* ============================================
+   رفض طلب التوثيق
+   ============================================ */
+export async function rejectVerification(
+  requestId,
+  reason = "",
+  uid = null
+) {
+  // لو التاجر موثق أصلاً، نأرشف الطلب
   if (uid) {
     const userRef = doc(db, "users", uid);
-    const { getDoc } = await import("firebase/firestore");
     const userSnap = await getDoc(userRef);
     const role = userSnap.data()?.role;
     if (role === ROLES.VERIFIED_TRADER || role === ROLES.ADMIN) {
-      // التاجر موثق بالفعل — اقفل الطلب كمقبول بدل مرفوض
       await updateDoc(doc(db, "verification_requests", requestId), {
         status: "approved",
         reviewedAt: serverTimestamp(),
