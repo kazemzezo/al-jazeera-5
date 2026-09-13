@@ -47,6 +47,7 @@ import {
 import InvoiceView from "../components/InvoiceView";
 import AddAdForm from "../components/AddAdForm";
 import AdminCategoriesTab from "../components/AdminCategoriesTab";
+import AdminSettingsTab from "../components/AdminSettingsTab";
 
 export default function AdminPanel() {
   const { user, isPrimaryAdmin } = useAuth();
@@ -112,6 +113,9 @@ export default function AdminPanel() {
         <Pill active={tab === "messages"} onClick={() => setTab("messages")}>
           رسائل التواصل
         </Pill>
+        <Pill active={tab === "settings"} onClick={() => setTab("settings")}>
+          ⚙️ الإعدادات
+        </Pill>
       </div>
 
       {tab === "reservations" && <ReservationsTab uid={user.uid} />}
@@ -123,6 +127,7 @@ export default function AdminPanel() {
       {tab === "prices" && <PricesTab uid={user.uid} />}
       {tab === "equipment" && <EquipmentTab uid={user.uid} />}
       {tab === "messages" && <MessagesTab />}
+      {tab === "settings" && <AdminSettingsTab />}
 
       <style>{`
         .admin-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
@@ -182,7 +187,6 @@ function AdsTab({ uid }) {
           )
       );
     } else {
-      // فلتر الحالة
       if (filter === "active") {
         list = list.filter((a) => ACTIVE_STATUSES.includes(a.status));
       } else if (filter === "archive") {
@@ -191,7 +195,6 @@ function AdsTab({ uid }) {
         list = list.filter((a) => a.status === filter);
       }
 
-      // فلتر القسم
       if (locationFilter !== "all") {
         list = list.filter((a) => a.location === locationFilter);
       }
@@ -300,7 +303,6 @@ function AdsTab({ uid }) {
 
   return (
     <div>
-      {/* إحصائيات سريعة */}
       <div className="ads-stats">
         <div className="ads-stat-card">
           <div className="ads-stat-label">📦 الرصيف البحري</div>
@@ -308,9 +310,7 @@ function AdsTab({ uid }) {
             {stats.dock.active}{" "}
             <span className="ads-stat-unit">نشط</span>
           </div>
-          <div className="ads-stat-sub">
-            من إجمالي {stats.dock.total}
-          </div>
+          <div className="ads-stat-sub">من إجمالي {stats.dock.total}</div>
         </div>
         <div className="ads-stat-card">
           <div className="ads-stat-label">🏭 ساحة الجزيره</div>
@@ -318,9 +318,7 @@ function AdsTab({ uid }) {
             {stats.yard.active}{" "}
             <span className="ads-stat-unit">نشط</span>
           </div>
-          <div className="ads-stat-sub">
-            من إجمالي {stats.yard.total}
-          </div>
+          <div className="ads-stat-sub">من إجمالي {stats.yard.total}</div>
         </div>
         <div className="ads-stat-card warn">
           <div className="ads-stat-label">🟡 جاري التحميل</div>
@@ -457,7 +455,8 @@ function AdsTab({ uid }) {
             const isExpanded = expandedId === ad.id;
             const isActive = ACTIVE_STATUSES.includes(ad.status);
             const isArchive = ARCHIVE_STATUSES.includes(ad.status);
-            const colors = AD_STATUS_COLORS[ad.status] || AD_STATUS_COLORS.active;
+            const colors =
+              AD_STATUS_COLORS[ad.status] || AD_STATUS_COLORS.active;
             const needsAttention =
               ad.status === AD_STATUS.LOADING ||
               ad.status === AD_STATUS.INACTIVE;
@@ -628,7 +627,6 @@ function AdsTab({ uid }) {
                       {isExpanded ? "إخفاء" : "الأصناف"}
                     </button>
 
-                    {/* أزرار الحالة */}
                     {isActive && (
                       <>
                         <button
