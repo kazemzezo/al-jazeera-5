@@ -224,7 +224,7 @@ export default function Calculator() {
         </div>
 
         <div className="calc-row">
-          <span className="label">عدد السيارات</span>
+    <span className="label">رسوم أشغال رصيف/ساحة لكل سيارة</span>
           <input
             className="calc-input"
             type="number"
@@ -233,7 +233,7 @@ export default function Calculator() {
             value={carCount}
             onChange={(e) => setCarCount(e.target.value)}
           />
-          <span className="unit">سيارة × {CAR_PRICE}ج</span>
+          <span className="unit">سيارة</span>
           <span className="rp">{fmt(carsTotal)}</span>
         </div>
 
