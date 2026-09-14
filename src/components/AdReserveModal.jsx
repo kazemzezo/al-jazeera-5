@@ -292,7 +292,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
           <Section title="السيارات (إجباري)" required>
             <div className="arm-row">
               <div className="arm-row-info">
-                <span className="arm-row-name">عدد السيارات</span>
+                <span className="arm-row-name">رسوم أشغال رصيف/ساحة لكل سيارة</span>
                 <span className="arm-row-sub">{CAR_PRICE}ج للسيارة</span>
               </div>
               <div className="arm-row-input">
