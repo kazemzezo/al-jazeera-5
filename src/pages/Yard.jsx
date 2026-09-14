@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { LOCATIONS } from "../lib/catalog";
 import { subscribeActiveAds } from "../lib/ads";
 import AdCard from "../components/AdCard";
+import { SkeletonAdGrid } from "../components/Skeleton";
 
 export default function Yard() {
   const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
 
   useEffect(() => {
     const unsub = subscribeActiveAds(
@@ -22,17 +22,6 @@ export default function Yard() {
     return () => unsub();
   }, []);
 
-  const displayed = ads.filter((a) => {
-    if (filter === "all") return true;
-    return a.status === filter;
-  });
-
-  const counts = {
-    all: ads.length,
-    active: ads.filter((a) => a.status === "active").length,
-    partial: ads.filter((a) => a.status === "partial").length,
-  };
-
   return (
     <div>
       <div style={{ marginBottom: 18 }}>
@@ -44,40 +33,9 @@ export default function Yard() {
         </p>
       </div>
 
-      {/* فلاتر */}
-      <div
-        style={{
-          display: "flex",
-          gap: 6,
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        {[
-          { k: "all", label: "الكل", n: counts.all },
-          { k: "active", label: "متاح", n: counts.active },
-          { k: "partial", label: "متاح جزئياً", n: counts.partial },
-        ].map((s) => (
-          <button
-            key={s.k}
-            className="btn"
-            style={{
-              fontSize: 12,
-              padding: "5px 12px",
-              background: filter === s.k ? "var(--kabbash)" : "transparent",
-              color: filter === s.k ? "#fff" : "var(--ink)",
-              borderColor: filter === s.k ? "var(--kabbash)" : "var(--line)",
-            }}
-            onClick={() => setFilter(s.k)}
-          >
-            {s.label} ({s.n})
-          </button>
-        ))}
-      </div>
-
       {loading ? (
-        <div className="page-loading">جاري التحميل...</div>
-      ) : displayed.length === 0 ? (
+        <SkeletonAdGrid count={6} />
+      ) : ads.length === 0 ? (
         <div
           style={{
             textAlign: "center",
@@ -103,7 +61,7 @@ export default function Yard() {
         </div>
       ) : (
         <div className="ad-grid">
-          {displayed.map((ad) => (
+          {ads.map((ad) => (
             <AdCard key={ad.id} ad={ad} />
           ))}
         </div>
