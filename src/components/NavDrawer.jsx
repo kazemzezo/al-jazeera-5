@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { ROLES, isDriver } from "../lib/roles";
 import Logo from "./Logo";
+import GlobalSearch from "./GlobalSearch";
 
 const IconMenu = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -50,9 +51,17 @@ const IconShare = () => (
   </svg>
 );
 
+const IconSearch = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="7" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+
 export default function NavDrawer() {
   const [open, setOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const { user, role, logout, isPrimaryAdmin } = useAuth();
   const { mode, toggle } = useTheme();
   const navigate = useNavigate();
@@ -76,6 +85,7 @@ export default function NavDrawer() {
     }
   }
 
+  // قفل تمرير الصفحة + إغلاق بمفتاح Escape
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -90,6 +100,18 @@ export default function NavDrawer() {
     };
   }, [open]);
 
+  // ✅ اختصار Ctrl+K / Cmd+K لفتح البحث
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <>
       <header className="app-header">
@@ -99,6 +121,15 @@ export default function NavDrawer() {
           </div>
 
           <div className="app-header-actions">
+            {/* زر البحث */}
+            <button
+              className="btn btn-ghost btn-icon"
+              onClick={() => setSearchOpen(true)}
+              aria-label="البحث"
+            >
+              <IconSearch />
+            </button>
+
             <button className="btn btn-ghost btn-icon" onClick={share} aria-label="مشاركة">
               <IconShare />
             </button>
@@ -129,6 +160,19 @@ export default function NavDrawer() {
             </div>
 
             <nav className="drawer-nav">
+              {/* زر البحث في القائمة */}
+              <button
+                className="drawer-search-btn"
+                onClick={() => {
+                  setOpen(false);
+                  setSearchOpen(true);
+                }}
+              >
+                <IconSearch />
+                <span>ابحث عن إعلان...</span>
+                <span className="drawer-kbd">Ctrl K</span>
+              </button>
+
               <DrawerLink onClick={() => go("/")}>الرئيسية</DrawerLink>
               <DrawerLink onClick={() => go(user ? "/profile" : "/login")}>
                 {user ? "حسابي" : "تسجيل الدخول"}
@@ -147,7 +191,6 @@ export default function NavDrawer() {
                 <DrawerLink onClick={() => go("/dock")}>الرصيف البحري</DrawerLink>
                 <DrawerLink onClick={() => go("/yard")}>ساحة الجزيره</DrawerLink>
                 <DrawerLink onClick={() => go("/calculator")}>🧪 أداة الحساب (تجربة)</DrawerLink>
-                <DrawerLink onClick={() => go("/experimental")}>🔬 أسعار آلية (تجربة)</DrawerLink>
 
                 {(role === ROLES.ADMIN || isPrimaryAdmin) && (
                   <DrawerLink onClick={() => go("/admin")}>لوحة الإدمن</DrawerLink>
@@ -184,6 +227,51 @@ export default function NavDrawer() {
           </aside>
         </div>
       )}
+
+      {/* ✅ البحث العام */}
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      <style>{`
+        .drawer-search-btn {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          padding: 11px var(--space-3);
+          background: var(--paper-sunken);
+          border: 1.5px solid var(--line);
+          border-radius: var(--radius-sm);
+          color: var(--steel);
+          font-family: inherit;
+          font-size: 13.5px;
+          cursor: pointer;
+          text-align: start;
+          margin-bottom: 8px;
+          transition: border-color .2s, background .2s;
+        }
+        .drawer-search-btn:hover {
+          border-color: var(--kabbash);
+          background: var(--paper-raised);
+        }
+        .drawer-search-btn span:nth-child(2) {
+          flex: 1;
+        }
+        .drawer-kbd {
+          font-size: 10.5px;
+          font-weight: 700;
+          background: var(--paper-raised);
+          color: var(--steel-light);
+          padding: 2px 6px;
+          border-radius: 4px;
+          border: 1px solid var(--line);
+          font-family: monospace;
+        }
+        @media (max-width: 480px) {
+          .drawer-kbd {
+            display: none;
+          }
+        }
+      `}</style>
     </>
   );
 }
