@@ -19,6 +19,7 @@ import { useGuestPrompt } from "../context/GuestPromptContext";
 import { canReserve as canReserveRole } from "../lib/roles";
 import AdReserveModal from "../components/AdReserveModal";
 import { SkeletonAdDetails } from "../components/Skeleton";
+import { SkeletonAdDetails } from "../components/Skeleton";
 
 export default function AdDetails() {
   const { id } = useParams();
