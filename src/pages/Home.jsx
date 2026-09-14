@@ -5,6 +5,7 @@ import { subscribeActiveAds, AD_STATUS } from "../lib/ads";
 import PriceBar from "../components/PriceBar";
 import AnnouncementBanner from "../components/AnnouncementBanner";
 import AdCard from "../components/AdCard";
+import { SkeletonAdGrid } from "../components/Skeleton";
 
 export default function Home() {
   const [location, setLocation] = useState("all");
@@ -36,7 +37,9 @@ export default function Home() {
   return (
     <div>
       <PriceBar />
-      <AnnouncementBanner location={location === "all" ? LOCATIONS.DOCK : location} />
+      <AnnouncementBanner
+        location={location === "all" ? LOCATIONS.DOCK : location}
+      />
 
       <div
         style={{
@@ -101,7 +104,7 @@ export default function Home() {
       </div>
 
       {loading ? (
-        <div className="page-loading">جاري التحميل...</div>
+        <SkeletonAdGrid count={6} />
       ) : displayed.length === 0 ? (
         <div
           style={{
