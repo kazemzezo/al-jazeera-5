@@ -18,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { useGuestPrompt } from "../context/GuestPromptContext";
 import { canReserve as canReserveRole } from "../lib/roles";
 import AdReserveModal from "../components/AdReserveModal";
+import RelatedAds from "../components/RelatedAds";
 import { SkeletonAdDetails } from "../components/Skeleton";
 
 
@@ -230,13 +231,16 @@ export default function AdDetails() {
             </button>
           )}
 
-          {user && !canReserveRole(role) && reservable && (
+                    {user && !canReserveRole(role) && reservable && (
             <p className="ad-details-note">
               حسابك غير موثق — أرسل طلب توثيق عشان تقدر تحجز.
             </p>
           )}
         </div>
       </div>
+
+      {/* ✅ إعلانات مقترحة */}
+      <RelatedAds currentAd={ad} limit={4} />
 
       {showModal && (
         <AdReserveModal
