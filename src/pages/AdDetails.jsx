@@ -27,6 +27,7 @@ export default function AdDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, role } = useAuth();
+  const { success } = useToast();
   const { promptLogin, promptVerification } = useGuestPrompt();
 
   const [ad, setAd] = useState(null);
