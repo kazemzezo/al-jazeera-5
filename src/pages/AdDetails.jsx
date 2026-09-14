@@ -22,7 +22,6 @@ import RelatedAds from "../components/RelatedAds";
 import { useToast } from "../context/ToastContext";
 import { SkeletonAdDetails } from "../components/Skeleton";
 
-
 export default function AdDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -34,7 +33,6 @@ export default function AdDetails() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [succeeded, setSucceeded] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeAd(
@@ -105,21 +103,6 @@ export default function AdDetails() {
       >
         ← رجوع
       </button>
-
-      {succeeded && (
-        <div
-          style={{
-            background: "var(--kabbash-light)",
-            border: "1px solid var(--kabbash)",
-            borderRadius: "var(--radius)",
-            padding: "10px 14px",
-            marginBottom: 14,
-            fontSize: 13,
-          }}
-        >
-          ✅ تم إرسال طلب الحجز بنجاح. تقدر تتابعه من صفحة "حسابي".
-        </div>
-      )}
 
       <div className="ad-details-card">
         <div className="ad-details-image-wrap">
@@ -233,7 +216,7 @@ export default function AdDetails() {
             </button>
           )}
 
-                    {user && !canReserveRole(role) && reservable && (
+          {user && !canReserveRole(role) && reservable && (
             <p className="ad-details-note">
               حسابك غير موثق — أرسل طلب توثيق عشان تقدر تحجز.
             </p>
@@ -249,7 +232,7 @@ export default function AdDetails() {
           ad={ad}
           onClose={() => setShowModal(false)}
           onSuccess={() => {
-            setSucceeded(true);
+            success("تم إرسال طلب الحجز بنجاح");
             setShowModal(false);
           }}
         />
