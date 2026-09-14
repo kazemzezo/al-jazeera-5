@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import NavDrawer from "./NavDrawer";
 import Footer from "./Footer";
+import BackToTop from "./BackToTop";
 import CompleteProfileForm, {
   PROFILE_FORM_DISMISSED_KEY,
 } from "./CompleteProfileForm";
@@ -12,7 +13,6 @@ import { isProfileComplete } from "../lib/profile";
 
 export default function AppLayout() {
   const { user, profile, role, loading } = useAuth();
-  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
@@ -53,7 +53,6 @@ export default function AppLayout() {
         flexDirection: "column",
       }}
     >
-      {/* ✅ Skeleton Styles — مرة واحدة لكل الصفحات */}
       <SkeletonStyles />
 
       <NavDrawer />
@@ -92,6 +91,9 @@ export default function AppLayout() {
       </main>
 
       <Footer />
+
+      {/* ✅ زر العودة لأعلى */}
+      <BackToTop />
 
       {showForm && <CompleteProfileForm onClose={handleClose} />}
     </div>
