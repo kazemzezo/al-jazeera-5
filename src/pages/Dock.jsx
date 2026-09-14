@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { LOCATIONS } from "../lib/catalog";
 import { subscribeActiveAds } from "../lib/ads";
 import AdCard from "../components/AdCard";
+import { SkeletonAdGrid } from "../components/Skeleton";
 
 export default function Dock() {
   const [ads, setAds] = useState([]);
@@ -33,7 +34,7 @@ export default function Dock() {
       </div>
 
       {loading ? (
-        <div className="page-loading">جاري التحميل...</div>
+        <SkeletonAdGrid count={6} />
       ) : ads.length === 0 ? (
         <div
           style={{
