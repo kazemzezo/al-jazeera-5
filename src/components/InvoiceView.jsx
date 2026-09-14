@@ -245,7 +245,7 @@ function AdContent({ invoice }) {
           )}
           {carCount > 0 && (
             <Line
-              label={`سيارات (${carCount} × ${fmt(invoice.carUnitPrice)})`}
+              label={`رسوم أشغال رصيف/ساحة (${carCount} سيارة × ${fmt(invoice.carUnitPrice)})`}
               value={invoice.carsTotal}
             />
           )}
