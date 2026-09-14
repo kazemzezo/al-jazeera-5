@@ -5,6 +5,7 @@ import Footer from "./Footer";
 import CompleteProfileForm, {
   PROFILE_FORM_DISMISSED_KEY,
 } from "./CompleteProfileForm";
+import { SkeletonStyles } from "./Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../lib/roles";
 import { isProfileComplete } from "../lib/profile";
@@ -16,10 +17,8 @@ export default function AppLayout() {
   const [dismissed, setDismissed] = useState(false);
 
   const isAdmin = role === ROLES.ADMIN;
-  const isIncomplete =
-    user && !isAdmin && !isProfileComplete(profile);
+  const isIncomplete = user && !isAdmin && !isProfileComplete(profile);
 
-  // تحديد ما إذا كان يجب عرض الفورم
   useEffect(() => {
     if (loading) return;
     if (!isIncomplete) {
@@ -54,6 +53,9 @@ export default function AppLayout() {
         flexDirection: "column",
       }}
     >
+      {/* ✅ Skeleton Styles — مرة واحدة لكل الصفحات */}
+      <SkeletonStyles />
+
       <NavDrawer />
 
       {isIncomplete && dismissed && !showForm && (
