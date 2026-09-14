@@ -18,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { useGuestPrompt } from "../context/GuestPromptContext";
 import { canReserve as canReserveRole } from "../lib/roles";
 import AdReserveModal from "../components/AdReserveModal";
+import { SkeletonAdDetails } from "../components/Skeleton";
 
 export default function AdDetails() {
   const { id } = useParams();
@@ -61,7 +62,7 @@ export default function AdDetails() {
   }
 
   if (loading) {
-    return <div className="page-loading">جاري تحميل الإعلان...</div>;
+    return <SkeletonAdDetails />;
   }
 
   if (notFound || !ad) {
@@ -131,7 +132,6 @@ export default function AdDetails() {
             <div className="ad-details-image-fallback">📦</div>
           )}
 
-          {/* شارة الحالة الكبيرة */}
           <span
             className={"ad-details-status-badge" + (isPulsing ? " pulse" : "")}
             style={{
@@ -144,7 +144,6 @@ export default function AdDetails() {
           </span>
         </div>
 
-        {/* شريط الحالة السفلي */}
         <div
           style={{
             height: 4,
