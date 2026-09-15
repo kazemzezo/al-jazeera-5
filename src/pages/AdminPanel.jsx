@@ -38,11 +38,13 @@ import AdminSettingsTab from "../components/AdminSettingsTab";
 import AdminWalletsTab from "../components/AdminWalletsTab";
 import AdminVerificationTab from "../components/AdminVerificationTab";
 import AdminUsersTab from "../components/AdminUsersTab";
+import AdminDeletionRequestsTab from "../components/AdminDeletionRequestsTab";
 
 export default function AdminPanel() {
   const { user, isPrimaryAdmin } = useAuth();
   const [tab, setTab] = useState("reservations");
   const [newCount, setNewCount] = useState(0);
+  const [deleteCount, setDeleteCount] = useState(0);
 
   useEffect(() => {
     const unsub = subscribeAllReservations((items) => {
@@ -92,6 +94,12 @@ export default function AdminPanel() {
           طلبات التوثيق
         </Pill>
         <Pill
+          active={tab === "deletions"}
+          onClick={() => setTab("deletions")}
+        >
+          🗑️ طلبات الحذف {deleteCount > 0 && <Badge>{deleteCount}</Badge>}
+        </Pill>
+        <Pill
           active={tab === "announcements"}
           onClick={() => setTab("announcements")}
         >
@@ -115,12 +123,9 @@ export default function AdminPanel() {
       {tab === "ads" && <AdsTab uid={user.uid} />}
       {tab === "categories" && <AdminCategoriesTab />}
       {tab === "wallets" && <AdminWalletsTab />}
-      {tab === "users" && isPrimaryAdmin && (
-        <AdminUsersTab adminUid={user.uid} />
-      )}
-      {tab === "verification" && (
-        <AdminVerificationTab adminUid={user.uid} />
-      )}
+      {tab === "users" && isPrimaryAdmin && <AdminUsersTab adminUid={user.uid} />}
+      {tab === "verification" && <AdminVerificationTab adminUid={user.uid} />}
+      {tab === "deletions" && <AdminDeletionRequestsTab />}
       {tab === "announcements" && <AnnouncementsTab />}
       {tab === "prices" && <PricesTab uid={user.uid} />}
       {tab === "equipment" && <EquipmentTab uid={user.uid} />}
