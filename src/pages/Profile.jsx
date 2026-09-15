@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { requestAccountDeletion, subscribeMyDeletionRequest } from "../lib/deletionRequests";import { useAuth } from "../context/AuthContext";
+import {
+  requestAccountDeletion,
+  subscribeMyDeletionRequest,
+} from "../lib/deletionRequests";
+import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../lib/roles";
 import { subscribeMyLatestVerification } from "../lib/verification";
 import { subscribeMyReservations } from "../lib/listings";
@@ -91,6 +95,7 @@ export default function Profile() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [deletionRequest, setDeletionRequest] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -107,27 +112,22 @@ export default function Profile() {
     return () => unsub();
   }, [user]);
 
-  async function handleDelete() {
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeMyDeletionRequest(user.uid, setDeletionRequest);
+    return () => unsub();
+  }, [user]);
+
+  async function handleDeleteRequest() {
     setDeleting(true);
     setError("");
     try {
-      await deleteAccountCompletely(user);
-      navigate("/");
+      await requestAccountDeletion(user, profile);
+      setConfirming(false);
     } catch (err) {
-      console.error("فشل حذف الحساب:", err);
-      if (err.code === "auth/requires-recent-login") {
-        setError(
-          "لأسباب أمنية، لازم تسجل خروج وتدخل تاني قبل ما تقدر تحذف الحساب."
-        );
-      } else if (err.code === "auth/popup-closed-by-user") {
-        setError("تم إلغاء العملية.");
-      } else if (err.code === "auth/cancelled-popup-request") {
-        setError("تم إلغاء العملية.");
-      } else {
-        setError(
-          err?.message || "حصل خطأ أثناء حذف الحساب، حاول مرة أخرى."
-        );
-      }
+      console.error("فشل طلب الحذف:", err);
+      setError(err?.message || "تعذر إرسال طلب الحذف، حاول مرة أخرى.");
+    } finally {
       setDeleting(false);
     }
   }
@@ -138,6 +138,7 @@ export default function Profile() {
 
   const isVerified = role === ROLES.VERIFIED_TRADER || role === ROLES.ADMIN;
   const isAdmin = role === ROLES.ADMIN;
+  const hasPendingDeletion = deletionRequest?.status === "pending";
 
   return (
     <div style={{ maxWidth: 620 }}>
@@ -357,73 +358,177 @@ export default function Profile() {
         )}
       </div>
 
-      {/* حذف الحساب */}
-      <div
-        style={{
-          background: "var(--paper-raised)",
-          border: "1px solid var(--danger)",
-          borderRadius: "var(--radius-lg)",
-          padding: 18,
-        }}
-      >
-        <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>
-          حذف الحساب
-        </p>
-        <p style={{ fontSize: 12, color: "var(--steel)", marginBottom: 12 }}>
-          حذف حسابك نهائي وسيؤدي لمسح بياناتك بالكامل من الموقع، ولا يمكن
-          التراجع عنه. سيُطلب منك تأكيد الهوية أولاً.
-        </p>
+      {/* حالة طلب الحذف */}
+      {deletionRequest && (
+        <div
+          style={{
+            background: "var(--paper-raised)",
+            border: `1px solid ${
+              deletionRequest.status === "rejected"
+                ? "var(--danger)"
+                : deletionRequest.status === "pending"
+                ? "var(--crane)"
+                : "var(--line)"
+            }`,
+            borderRadius: "var(--radius-lg)",
+            padding: 18,
+            marginBottom: 16,
+          }}
+        >
+          <p style={{ fontSize: 14, fontWeight: 800, margin: "0 0 10px" }}>
+            طلب حذف الحساب
+          </p>
 
-        {!confirming ? (
-          <button
-            className="btn"
-            style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
-            onClick={() => setConfirming(true)}
-          >
-            حذف الحساب
-          </button>
-        ) : (
-          <div>
-            <p style={{ fontSize: 13, marginBottom: 10 }}>
-              متأكد؟ هيتم فتح نافذة تأكيد الهوية، وبعدها بياناتك هتتحذف
-              بالكامل ولن تستطيع استرجاعها.
-            </p>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className="btn"
+          {deletionRequest.status === "pending" && (
+            <>
+              <div
+                className="badge badge-warn"
+                style={{ padding: "8px 14px", fontSize: 13 }}
+              >
+                ⏳ طلب الحذف تحت المراجعة
+              </div>
+              <p
                 style={{
-                  background: "var(--danger)",
-                  borderColor: "var(--danger)",
-                  color: "#fff",
+                  fontSize: 12.5,
+                  color: "var(--steel)",
+                  margin: "10px 0 0",
+                  lineHeight: 1.7,
                 }}
-                onClick={handleDelete}
-                disabled={deleting}
               >
-                {deleting ? "جاري الحذف..." : "نعم، احذف حسابي"}
-              </button>
-              <button
-                className="btn"
-                onClick={() => setConfirming(false)}
-                disabled={deleting}
-              >
-                تراجع
-              </button>
-            </div>
-          </div>
-        )}
+                هيتم التواصل معك من الإدارة قبل الحذف النهائي.
+              </p>
+            </>
+          )}
 
-        {error && (
+          {deletionRequest.status === "rejected" && (
+            <>
+              <div
+                className="badge badge-danger"
+                style={{ padding: "8px 14px", fontSize: 13 }}
+              >
+                ❌ تم رفض طلب الحذف
+              </div>
+              {deletionRequest.rejectReason && (
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "var(--ink)",
+                    margin: "10px 0 0",
+                  }}
+                >
+                  <b>السبب:</b> {deletionRequest.rejectReason}
+                </p>
+              )}
+            </>
+          )}
+
+          {deletionRequest.status === "completed" && (
+            <div
+              className="badge"
+              style={{ padding: "8px 14px", fontSize: 13 }}
+            >
+              ✅ تم تنفيذ طلب الحذف
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* حذف الحساب */}
+      {!isAdmin && (
+        <div
+          style={{
+            background: "var(--paper-raised)",
+            border: "1px solid var(--danger)",
+            borderRadius: "var(--radius-lg)",
+            padding: 18,
+          }}
+        >
+          <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>
+            طلب حذف الحساب
+          </p>
           <p
             style={{
-              color: "var(--danger)",
               fontSize: 12,
-              marginTop: 10,
+              color: "var(--steel)",
+              marginBottom: 12,
+              lineHeight: 1.7,
             }}
           >
-            {error}
+            عند إرسال الطلب، هيتم مراجعته من الإدارة والتواصل معك. الحذف
+            نهائي ولا يمكن التراجع عنه.
           </p>
-        )}
-      </div>
+
+          {hasPendingDeletion ? (
+            <div
+              style={{
+                padding: "10px 14px",
+                background: "var(--crane-light)",
+                border: "1px solid var(--crane)",
+                borderRadius: "var(--radius)",
+                fontSize: 12.5,
+                color: "var(--crane)",
+                fontWeight: 700,
+              }}
+            >
+              ⏳ لديك طلب حذف قيد المراجعة — هيتم التواصل معك قريبًا.
+            </div>
+          ) : !confirming ? (
+            <button
+              className="btn"
+              style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+              onClick={() => setConfirming(true)}
+            >
+              طلب حذف الحساب
+            </button>
+          ) : (
+            <div>
+              <p
+                style={{
+                  fontSize: 13,
+                  marginBottom: 10,
+                  lineHeight: 1.7,
+                }}
+              >
+                هيتم إرسال طلب للإدارة لمراجعة حذف حسابك. سيتم التواصل معك
+                قبل الحذف النهائي.
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn"
+                  style={{
+                    background: "var(--danger)",
+                    borderColor: "var(--danger)",
+                    color: "#fff",
+                  }}
+                  onClick={handleDeleteRequest}
+                  disabled={deleting}
+                >
+                  {deleting ? "جاري الإرسال..." : "نعم، أرسل طلب الحذف"}
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => setConfirming(false)}
+                  disabled={deleting}
+                >
+                  تراجع
+                </button>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <p
+              style={{
+                color: "var(--danger)",
+                fontSize: 12,
+                marginTop: 10,
+              }}
+            >
+              {error}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* المودالات */}
       {editing && (
