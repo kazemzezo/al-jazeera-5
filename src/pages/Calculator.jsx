@@ -25,6 +25,7 @@ export default function Calculator() {
   const [workerCount, setWorkerCount] = useState(0);
   const [loadingTons, setLoadingTons] = useState(1);
   const [carCount, setCarCount] = useState(1);
+  const [helpOpen, setHelpOpen] = useState(null); // "loading" | "cars" | null
 
   const [liveTonPrices, setLiveTonPrices] = useState({});
   const [liveEquipmentPrices, setLiveEquipmentPrices] = useState({});
@@ -117,7 +118,7 @@ export default function Calculator() {
         ))}
       </div>
 
-      <Section title="ميزان بيسكول">
+      <Section title="ميزان بيسكول" required>
         {rows.map((r, idx) => {
           const price = tonPrices[r.category]?.pricePerTon || 0;
           return (
@@ -167,7 +168,11 @@ export default function Calculator() {
         </button>
       </Section>
 
-      <Section title="المعدات والعمال">
+      <Section
+        title="التحميل — معدات أو عمال"
+        required
+        onHelp={() => setHelpOpen("loading")}
+      >
         {equipmentList.map((eq) => (
           <div key={eq.id} className="calc-row">
             <span className="label">{eq.name}</span>
@@ -222,24 +227,30 @@ export default function Calculator() {
           <span className="unit">طن</span>
           <span className="rp">{fmt(loadingTotal)}</span>
         </div>
+      </Section>
 
+      <Section
+        title="السيارات — رسوم الأشغال"
+        required
+        onHelp={() => setHelpOpen("cars")}
+      >
         <div className="calc-row">
-    <span className="label">رسوم أشغال رصيف/ساحة لكل سيارة</span>
+          <span className="label">عدد السيارات</span>
           <input
             className="calc-input"
             type="number"
-            min="0"
+            min="1"
             step="1"
             value={carCount}
             onChange={(e) => setCarCount(e.target.value)}
           />
-          <span className="unit">سيارة</span>
+          <span className="unit">سيارة × {CAR_PRICE}ج</span>
           <span className="rp">{fmt(carsTotal)}</span>
         </div>
 
         <p className="calc-note">
-          سعر تحميل الطن: {fmt(LOADING_PRICE_PER_TON)} · العامل: {fmt(WORKER_PRICE)}{" "}
-          · السيارة: {fmt(CAR_PRICE)}
+          سعر تحميل الطن: {fmt(LOADING_PRICE_PER_TON)} · العامل:{" "}
+          {fmt(WORKER_PRICE)} · السيارة: {fmt(CAR_PRICE)}
         </p>
       </Section>
 
@@ -248,7 +259,7 @@ export default function Calculator() {
         <Line label="إيجار المعدات" value={equipmentTotal} />
         <Line label="أجور التحميل" value={loadingTotal} />
         <Line label="أجور العمال" value={workersTotal} />
-        <Line label="السيارات" value={carsTotal} />
+        <Line label="رسوم الأشغال (السيارات)" value={carsTotal} />
         <div
           style={{
             display: "flex",
@@ -267,6 +278,10 @@ export default function Calculator() {
           إعلان من الرئيسية.
         </div>
       </Section>
+
+      {helpOpen && (
+        <HelpModal type={helpOpen} onClose={() => setHelpOpen(null)} />
+      )}
 
       <style>{`
         .calc-title { font-size: 22px; font-weight: 900; margin: 0 0 4px; }
@@ -415,32 +430,238 @@ export default function Calculator() {
   );
 }
 
-function Section({ title, children }) {
+/* ============================================
+   Section — مع علامة الاستفهام
+   ============================================ */
+function Section({ title, children, required, onHelp }) {
   return (
-    <div
-      style={{
-        background: "var(--paper-raised)",
-        border: "1px solid var(--line)",
-        borderRadius: "var(--radius)",
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
-      <p
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: "var(--steel)",
-          margin: "0 0 10px",
-        }}
-      >
+    <div className="calc-section">
+      <p className="calc-section-title">
         {title}
+        {required && <span className="calc-req"> *</span>}
+        {onHelp && (
+          <button
+            type="button"
+            className="calc-help"
+            onClick={onHelp}
+            aria-label="شرح"
+            title="اضغط للشرح"
+          >
+            ؟
+          </button>
+        )}
       </p>
       {children}
+
+      <style>{`
+        .calc-section {
+          background: var(--paper-raised);
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          padding: 16px;
+          margin-bottom: 16px;
+        }
+        .calc-section-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--steel);
+          margin: 0 0 10px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .calc-req {
+          color: var(--danger);
+          font-weight: 900;
+        }
+        .calc-help {
+          background: var(--paper-sunken);
+          border: 1.5px solid var(--steel-light);
+          color: var(--steel);
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          font-size: 11px;
+          font-weight: 900;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-family: inherit;
+          padding: 0;
+          transition: all .2s;
+        }
+        .calc-help:hover {
+          background: var(--kabbash);
+          border-color: var(--kabbash);
+          color: #fff;
+        }
+      `}</style>
     </div>
   );
 }
 
+/* ============================================
+   مودال الشرح
+   ============================================ */
+function HelpModal({ type, onClose }) {
+  const content = {
+    loading: {
+      title: "التحميل — معدات أو عمال",
+      body: (
+        <>
+          <p>
+            التحميل إجباري باستخدام <b>معدات الموقع</b> أو{" "}
+            <b>عمال الموقع</b> — أو الاتنين مع بعض.
+          </p>
+          <p>
+            <b>يجب اختيار بند واحد على الأقل</b> من البندين:
+          </p>
+          <ul style={{ paddingInlineStart: 20, margin: "8px 0 12px" }}>
+            <li>معدة واحدة على الأقل (كباش، رافعة شوكية، رافعة مجنزرة).</li>
+            <li>عامل واحد على الأقل.</li>
+          </ul>
+          <p>
+            <b>ليه العامل إجباري على الأقل؟</b> لأنه المسؤول عن تحميل الخردة
+            ومتابعة السيارة حتى نهاية العملية.
+          </p>
+          <p style={{ color: "var(--steel)", fontSize: 12.5 }}>
+            <b>نطاق مسؤولية العامل:</b> يقتصر على التحميل ومتابعة السيارة
+            فقط — ولا يترتب عليه أو على الموقع أي مسؤولية أخرى، أياً كانت.
+          </p>
+        </>
+      ),
+    },
+    cars: {
+      title: "السيارات — رسوم الأشغال",
+      body: (
+        <>
+          <p>
+            <b>السيارة</b> دي سيارة التاجر اللي هيحمّل عليها الخردة — جايبها
+            بنفسه أو يستأجرها.
+          </p>
+          <p>
+            كل سيارة عليها <b>رسوم أشغال رصيف/ساحة</b> قدرها{" "}
+            <b>300 جنيه</b>، مقابل:
+          </p>
+          <ul style={{ paddingInlineStart: 20, margin: "8px 0 12px" }}>
+            <li>استخدام مساحة الموقع في عملية التحميل.</li>
+            <li>استخدام معدات الموقع وعماله.</li>
+            <li>متابعة السيارة حتى نهاية التحميل.</li>
+          </ul>
+          <p style={{ color: "var(--steel)", fontSize: 12.5 }}>
+            لو محتاج أكتر من سيارة → زوّد العدد. الرسوم بتتحسب لكل سيارة على
+            حدة.
+          </p>
+        </>
+      ),
+    },
+  };
+
+  const data = content[type];
+  if (!data) return null;
+
+  return (
+    <div className="help-backdrop" onClick={onClose}>
+      <div className="help-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="help-header">
+          <h3 className="help-title">💡 {data.title}</h3>
+          <button
+            className="help-close"
+            onClick={onClose}
+            type="button"
+            aria-label="إغلاق"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="help-body">{data.body}</div>
+        <button
+          className="btn btn-primary"
+          style={{ width: "100%", marginTop: 14 }}
+          onClick={onClose}
+        >
+          فهمت
+        </button>
+      </div>
+
+      <style>{`
+        .help-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(10, 18, 16, 0.7);
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          z-index: 110;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+          animation: help-fade .2s ease;
+        }
+        @keyframes help-fade {
+          from { opacity: 0 }
+          to { opacity: 1 }
+        }
+        .help-modal {
+          background: var(--paper-raised);
+          color: var(--ink);
+          border-radius: 16px;
+          padding: 22px;
+          width: 100%;
+          max-width: 460px;
+          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+          animation: help-pop .25s cubic-bezier(0.22, 0.61, 0.36, 1);
+          max-height: 90vh;
+          overflow-y: auto;
+        }
+        @keyframes help-pop {
+          from { transform: scale(0.95); opacity: 0 }
+          to { transform: scale(1); opacity: 1 }
+        }
+        .help-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 14px;
+          padding-bottom: 12px;
+          border-bottom: 1px solid var(--line);
+        }
+        .help-title {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 900;
+          color: var(--kabbash);
+        }
+        .help-close {
+          background: transparent;
+          border: none;
+          color: var(--steel);
+          font-size: 15px;
+          cursor: pointer;
+          padding: 2px 8px;
+          border-radius: 6px;
+        }
+        .help-close:hover {
+          background: var(--paper-sunken);
+        }
+        .help-body {
+          font-size: 13.5px;
+          line-height: 1.9;
+          color: var(--ink);
+        }
+        .help-body p {
+          margin: 0 0 10px;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ============================================
+   Line
+   ============================================ */
 function Line({ label, value }) {
   return (
     <div
