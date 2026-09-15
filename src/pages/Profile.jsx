@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { deleteAccountCompletely } from "../lib/accountDeletion";
-import { useAuth } from "../context/AuthContext";
+import { requestAccountDeletion, subscribeMyDeletionRequest } from "../lib/deletionRequests";import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../lib/roles";
 import { subscribeMyLatestVerification } from "../lib/verification";
 import { subscribeMyReservations } from "../lib/listings";
