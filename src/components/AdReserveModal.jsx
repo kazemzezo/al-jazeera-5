@@ -20,10 +20,11 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
 
   const [equipmentHours, setEquipmentHours] = useState({});
   const [workerCount, setWorkerCount] = useState(0);
-  const [carCount, setCarCount] = useState(1); // ← افتراضي 1 (إجباري)
+  const [carCount, setCarCount] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(null); // "loading" | "cars" | null
 
   const itemsWithTotals = useMemo(() => {
     return (ad.items || []).map((it) => {
@@ -64,16 +65,18 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
 
   const grandTotal = itemsTotal + equipmentTotal + workersTotal + carsTotal;
 
-  // الشروط الجديدة
+  // الشروط
   const hasAnyItem = itemsWithTotals.some((it) => it.qty > 0);
   const hasAnyEquipment = equipmentWithTotals.some((eq) => eq.hours > 0);
   const hasWorkers = Number(workerCount) > 0;
   const hasCars = Number(carCount) >= 1;
 
-  // لازم سيارة + (صنف أو معدة أو عامل)
+  // ✅ المنطق الجديد:
+  // 1) صنف واحد على الأقل (إجباري)
+  // 2) معدة أو عامل (إجباري - واحد على الأقل)
+  // 3) سيارة واحدة على الأقل (إجباري)
   const hasEquipmentOrWorkers = hasAnyEquipment || hasWorkers;
-  const canSubmit =
-    hasCars && (hasAnyItem || hasEquipmentOrWorkers);
+  const canSubmit = hasAnyItem && hasEquipmentOrWorkers && hasCars;
 
   function setItemQty(category, value, max) {
     const num = Number(value || 0);
@@ -86,14 +89,18 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
     e.preventDefault();
     setError("");
 
-    if (!hasCars) {
-      setError("عدد السيارات إجباري — لازم سيارة واحدة على الأقل");
+    if (!hasAnyItem) {
+      setError("لازم تختار صنف واحد على الأقل من الأصناف");
       return;
     }
-    if (!hasAnyItem && !hasEquipmentOrWorkers) {
+    if (!hasEquipmentOrWorkers) {
       setError(
-        "لازم تختار صنف واحد على الأقل، أو معدة، أو عامل"
+        "لازم تختار معدة من المعدات أو عامل واحد على الأقل للتحميل"
       );
+      return;
+    }
+    if (!hasCars) {
+      setError("لازم تكون فيه سيارة واحدة على الأقل");
       return;
     }
 
@@ -173,7 +180,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
           <div>
             <h2 className="arm-title">تأكيد الحجز</h2>
             <p className="arm-subtitle">
-              عدّل الكميات وأضف المعدات والعمال والسيارات. السيارة إجبارية.
+              اختر الأصناف والكميات، وحدّد طريقة التحميل والسيارة.
             </p>
           </div>
           <button
@@ -187,8 +194,8 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* الأصناف */}
-          <Section title="الأصناف (اختياري)">
+          {/* ✅ 1. الأصناف — إجباري */}
+          <Section title="الأصناف" required>
             {itemsWithTotals.map((it) => (
               <div key={it.category} className="arm-row">
                 <div className="arm-row-info">
@@ -222,8 +229,13 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             ))}
           </Section>
 
-          {/* المعدات */}
-          <Section title="المعدات (اختياري)">
+          {/* ✅ 2. التحميل (معدات + عمال) — إجباري */}
+          <Section
+            title="التحميل — معدات أو عمال"
+            required
+            helpText="التحميل إجباري بمعدات الموقع أو عماله. اختر معدة واحدة على الأقل (كباش، رافعة شوكية، إلخ) أو عامل واحد على الأقل — لأنه المسؤول عن تحميل الخردة ومتابعة السيارة حتى نهاية العملية."
+            onHelp={() => setHelpOpen("loading")}
+          >
             {equipmentWithTotals.map((eq) => (
               <div key={eq.id} className="arm-row">
                 <div className="arm-row-info">
@@ -256,10 +268,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
                 </div>
               </div>
             ))}
-          </Section>
 
-          {/* العمال */}
-          <Section title="العمال (اختياري — بس إجباري معدة أو عامل)">
             <div className="arm-row">
               <div className="arm-row-info">
                 <span className="arm-row-name">عدد العمال</span>
@@ -288,12 +297,19 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             </div>
           </Section>
 
-          {/* السيارات — إجباري */}
-          <Section title="السيارات (إجباري)" required>
+          {/* ✅ 3. السيارات — إجباري */}
+          <Section
+            title="السيارات"
+            required
+            helpText="السيارة دي سيارة التاجر اللي هيحمّل عليها الخردة. كل سيارة عليها رسوم أشغال رصيف/ساحة قدرها 300ج، مقابل استخدام مساحة الموقع ومعداته في عملية التحميل. لو محتاج أكتر من سيارة، زوّد العدد."
+            onHelp={() => setHelpOpen("cars")}
+          >
             <div className="arm-row">
               <div className="arm-row-info">
-                <span className="arm-row-name">رسوم أشغال رصيف/ساحة لكل سيارة</span>
-                <span className="arm-row-sub">{CAR_PRICE}ج للسيارة</span>
+                <span className="arm-row-name">عدد السيارات</span>
+                <span className="arm-row-sub">
+                  {CAR_PRICE}ج رسوم أشغال لكل سيارة
+                </span>
               </div>
               <div className="arm-row-input">
                 <input
@@ -331,7 +347,7 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
 
           {!canSubmit && (
             <p className="arm-hint">
-              ⚠️ لازم تختار: سيارة واحدة على الأقل + (صنف أو معدة أو عامل)
+              ⚠️ لازم تختار: صنف واحد على الأقل + معدة أو عامل + سيارة واحدة
             </p>
           )}
 
@@ -359,6 +375,13 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
             ملاحظة: الحجز هيتأكد نهائياً بعد موافقة الإدارة.
           </p>
         </form>
+
+        {helpOpen && (
+          <HelpModal
+            type={helpOpen}
+            onClose={() => setHelpOpen(null)}
+          />
+        )}
       </div>
 
       <style>{styles}</style>
@@ -366,12 +389,23 @@ export default function AdReserveModal({ ad, onClose, onSuccess }) {
   );
 }
 
-function Section({ title, children, required }) {
+function Section({ title, children, required, helpText, onHelp }) {
   return (
     <div className="arm-section">
       <h3 className="arm-section-title">
         {title}
         {required && <span className="arm-req"> *</span>}
+        {helpText && (
+          <button
+            type="button"
+            className="arm-help"
+            onClick={onHelp}
+            aria-label="شرح"
+            title="اضغط للشرح"
+          >
+            ؟
+          </button>
+        )}
       </h3>
       <div className="arm-section-body">{children}</div>
     </div>
@@ -383,6 +417,154 @@ function SummaryRow({ label, value }) {
     <div className="arm-summary-row">
       <span>{label}</span>
       <span>{value.toLocaleString("ar-EG")}ج</span>
+    </div>
+  );
+}
+
+/* مودال الشرح */
+function HelpModal({ type, onClose }) {
+  const content = {
+    loading: {
+      title: "التحميل — معدات أو عمال",
+      body: (
+        <>
+          <p>
+            التحميل إجباري باستخدام <b>معدات الموقع</b> أو{" "}
+            <b>عمال الموقع</b> — أو الاتنين مع بعض.
+          </p>
+          <p>
+            <b>يجب اختيار بند واحد على الأقل</b> من البندين:
+          </p>
+          <ul style={{ paddingInlineStart: 20, margin: "8px 0 12px" }}>
+            <li>معدة واحدة على الأقل (كباش، رافعة شوكية، رافعة مجنزرة).</li>
+            <li>عامل واحد على الأقل.</li>
+          </ul>
+          <p>
+            <b>ليه العامل إجباري على الأقل؟</b> لأنه المسؤول عن تحميل الخردة
+            ومتابعة السيارة حتى نهاية العملية.
+          </p>
+          <p style={{ color: "var(--steel)", fontSize: 12.5 }}>
+            <b>نطاق مسؤولية العامل:</b> يقتصر على التحميل ومتابعة السيارة
+            فقط — ولا يترتب عليه أو على الموقع أي مسؤولية أخرى، أياً كانت.
+          </p>
+        </>
+      ),
+    },
+    cars: {
+      title: "السيارات — رسوم الأشغال",
+      body: (
+        <>
+          <p>
+            <b>السيارة</b> دي سيارة التاجر اللي هيحمّل عليها الخردة — جايبها
+            بنفسه أو يستأجرها.
+          </p>
+          <p>
+            كل سيارة عليها <b>رسوم أشغال رصيف/ساحة</b> قدرها{" "}
+            <b>300 جنيه</b>، مقابل:
+          </p>
+          <ul style={{ paddingInlineStart: 20, margin: "8px 0 12px" }}>
+            <li>استخدام مساحة الموقع في عملية التحميل.</li>
+            <li>استخدام معدات الموقع وعماله.</li>
+            <li>متابعة السيارة حتى نهاية التحميل.</li>
+          </ul>
+          <p style={{ color: "var(--steel)", fontSize: 12.5 }}>
+            لو محتاج أكتر من سيارة → زوّد العدد. الرسوم بتتحسب لكل سيارة على
+            حدة.
+          </p>
+        </>
+      ),
+    },
+  };
+
+  const data = content[type];
+  if (!data) return null;
+
+  return (
+    <div className="arm-help-backdrop" onClick={onClose}>
+      <div className="arm-help-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="arm-help-header">
+          <h3 className="arm-help-title">💡 {data.title}</h3>
+          <button
+            className="arm-help-close"
+            onClick={onClose}
+            type="button"
+            aria-label="إغلاق"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="arm-help-body">{data.body}</div>
+        <button
+          className="btn btn-primary"
+          style={{ width: "100%", marginTop: 14 }}
+          onClick={onClose}
+        >
+          فهمت
+        </button>
+      </div>
+
+      <style>{`
+        .arm-help-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(10, 18, 16, 0.7);
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          z-index: 110;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+          animation: arm-fade .2s ease;
+        }
+        .arm-help-modal {
+          background: var(--paper-raised);
+          color: var(--ink);
+          border-radius: 16px;
+          padding: 22px;
+          width: 100%;
+          max-width: 460px;
+          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+          animation: arm-pop .25s cubic-bezier(0.22, 0.61, 0.36, 1);
+          max-height: 90vh;
+          overflow-y: auto;
+        }
+        .arm-help-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 14px;
+          padding-bottom: 12px;
+          border-bottom: 1px solid var(--line);
+        }
+        .arm-help-title {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 900;
+          color: var(--kabbash);
+        }
+        .arm-help-close {
+          background: transparent;
+          border: none;
+          color: var(--steel);
+          font-size: 15px;
+          cursor: pointer;
+          padding: 2px 8px;
+          border-radius: 6px;
+        }
+        .arm-help-close:hover {
+          background: var(--paper-sunken);
+        }
+        .arm-help-body {
+          font-size: 13.5px;
+          line-height: 1.9;
+          color: var(--ink);
+        }
+        .arm-help-body p {
+          margin: 0 0 10px;
+        }
+      `}</style>
     </div>
   );
 }
@@ -466,10 +648,37 @@ const styles = `
     color: var(--steel);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
   .arm-req {
     color: var(--danger);
     font-weight: 900;
+  }
+  .arm-help {
+    background: var(--paper-raised);
+    border: 1.5px solid var(--steel-light);
+    color: var(--steel);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 900;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    padding: 0;
+    transition: all .2s;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .arm-help:hover {
+    background: var(--kabbash);
+    border-color: var(--kabbash);
+    color: #fff;
   }
   .arm-section-body {
     display: flex;
