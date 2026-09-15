@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { deleteDoc, doc } from "firebase/firestore";
-import { deleteUser } from "firebase/auth";
+import { deleteAccountCompletely } from "../lib/accountDeletion";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../lib/firebase";
 import { ROLES } from "../lib/roles";
 import { subscribeMyLatestVerification } from "../lib/verification";
 import { subscribeMyReservations } from "../lib/listings";
@@ -114,16 +112,22 @@ export default function Profile() {
     setDeleting(true);
     setError("");
     try {
-      await deleteDoc(doc(db, "users", user.uid));
-      await deleteUser(user);
+      await deleteAccountCompletely(user);
       navigate("/");
     } catch (err) {
+      console.error("فشل حذف الحساب:", err);
       if (err.code === "auth/requires-recent-login") {
         setError(
           "لأسباب أمنية، لازم تسجل خروج وتدخل تاني قبل ما تقدر تحذف الحساب."
         );
+      } else if (err.code === "auth/popup-closed-by-user") {
+        setError("تم إلغاء العملية.");
+      } else if (err.code === "auth/cancelled-popup-request") {
+        setError("تم إلغاء العملية.");
       } else {
-        setError("حصل خطأ أثناء حذف الحساب، حاول مرة أخرى.");
+        setError(
+          err?.message || "حصل خطأ أثناء حذف الحساب، حاول مرة أخرى."
+        );
       }
       setDeleting(false);
     }
@@ -181,7 +185,7 @@ export default function Profile() {
         <Row label="نوع الحساب" value={ROLE_LABELS[role] || "—"} last />
       </div>
 
-      {/* ✅ محفظتي */}
+      {/* محفظتي */}
       {isVerified && !isAdmin && <WalletCard />}
 
       {/* حالة التوثيق */}
@@ -368,7 +372,7 @@ export default function Profile() {
         </p>
         <p style={{ fontSize: 12, color: "var(--steel)", marginBottom: 12 }}>
           حذف حسابك نهائي وسيؤدي لمسح بياناتك بالكامل من الموقع، ولا يمكن
-          التراجع عنه.
+          التراجع عنه. سيُطلب منك تأكيد الهوية أولاً.
         </p>
 
         {!confirming ? (
@@ -382,7 +386,8 @@ export default function Profile() {
         ) : (
           <div>
             <p style={{ fontSize: 13, marginBottom: 10 }}>
-              متأكد؟ بياناتك هتتحذف بالكامل ولن تستطيع استرجاعها.
+              متأكد؟ هيتم فتح نافذة تأكيد الهوية، وبعدها بياناتك هتتحذف
+              بالكامل ولن تستطيع استرجاعها.
             </p>
             <div style={{ display: "flex", gap: 8 }}>
               <button
