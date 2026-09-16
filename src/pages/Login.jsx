@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
@@ -89,9 +89,13 @@ export default function Login() {
 
         <p style={{ fontSize: 12, color: "var(--steel-light)", marginTop: 24 }}>
           بالمتابعة أنت توافق على{" "}
-          <a href="/privacy" style={{ textDecoration: "underline" }}>
-            سياسة الخصوصية وشروط الاستخدام
-          </a>
+          <Link to="/privacy" style={{ textDecoration: "underline" }}>
+            سياسة الخصوصية
+          </Link>{" "}
+          و{" "}
+          <Link to="/terms" style={{ textDecoration: "underline" }}>
+            شروط الاستخدام
+          </Link>
         </p>
       </div>
     </div>
